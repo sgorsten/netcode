@@ -4,14 +4,14 @@
 
 using namespace arith;
 
-enum
+enum : code_t
 {
 	NUM_BITS = sizeof(code_t) * 8,
 	BOUND0 = 0,
-	BOUND1 = 1 << (NUM_BITS - 3),
-	BOUND2 = 1 << (NUM_BITS - 2),
+	BOUND1 = 1ULL << (NUM_BITS - 3),
+	BOUND2 = 1ULL << (NUM_BITS - 2),
 	BOUND3 = BOUND1 | BOUND2,
-	BOUND4 = 1 << (NUM_BITS - 1),	
+	BOUND4 = 1ULL << (NUM_BITS - 1),	
 	MAX_DENOM = BOUND1 - 1
 };
 
