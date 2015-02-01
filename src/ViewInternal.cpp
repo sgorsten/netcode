@@ -7,6 +7,11 @@ template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
 	return std::find(begin(vec), end(vec), value) - begin(vec);
 }
 
+template<class T, class F> void EraseIf(std::vector<T> & vec, F f)
+{
+    vec.erase(remove_if(begin(vec), end(vec), f), end(vec));
+}
+
 VObject_::VObject_(VServer server, const Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
@@ -85,7 +90,7 @@ void VPeer_::OnPublishFrame(int frame)
     visChanges.clear();
     this->frame = frame;
 
-    records.erase(remove_if(begin(records), end(records), [=](ObjectRecord & r) { return r.frameRemoved < frame-2; }), end(records));
+    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < frame-2; });
 }
 
 void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
@@ -173,7 +178,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
         delete views[index];
         views[index] = 0;
     }
-    views.erase(remove_if(begin(views), end(views), [](VView v) { return !v; }), end(views));
+    EraseIf(views, [](VView v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
 	int newObjects = newObjectCountDist.DecodeAndTally(decoder);

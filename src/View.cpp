@@ -52,7 +52,7 @@ static size_t MemUsage(uint8_t) { return 0; }
 static size_t MemUsage(int) { return 0; }
 static size_t MemUsage(const VPeer_::ObjectRecord & r) { return 0; }
 static size_t MemUsage(const VClass_ * cl) { return sizeof(VClass_); }
-static size_t MemUsage(const Field & f) { return 0; }
+static size_t MemUsage(const Class::Field & f) { return 0; }
 static size_t MemUsage(const Class & cl) { return MemUsage(cl.cl) + MemUsage(cl.fields); }
 static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_); }
 static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }

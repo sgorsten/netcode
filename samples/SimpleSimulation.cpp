@@ -76,8 +76,24 @@ public:
 		vSetObjectInt(bar, 3, 32);
 
         vPublishFrame(server);
-        // std::cout << "Timestep " << timestep << ", server memory use: " << vDebugServerMemoryUsage(server) << " B." << std::endl;
+        std::cout << "Timestep " << timestep << ", server memory use: " << vDebugServerMemoryUsage(server) << " B." << std::endl;
 	}
+
+    void Draw() const
+    {
+        glColor3f(0.3f, 0.3f, 0.3f);
+        for(auto & obj : objects)
+        {
+            if(!obj.vobj) continue;
+		    glBegin(GL_TRIANGLE_FAN);	    
+		    for (int i = 0; i < 12; ++i)
+		    {
+			    float a = i*6.28f / 12;
+			    glVertex2f(obj.px + cos(a) * 10, obj.py + sin(a) * 10);
+		    }
+		    glEnd();
+        }
+    }
 
 	std::vector<uint8_t> PublishUpdate(int peer)
 	{
@@ -103,8 +119,6 @@ public:
 
 	void Draw(float r, float g, float b) const
 	{
-		glPushMatrix();
-		glOrtho(0, 1280, 720, 0, -1, +1);
 		for (int i = 0, n = vGetViewCount(client); i < n; ++i)
 		{
 			auto view = vGetView(client, i);
@@ -112,8 +126,6 @@ public:
 			{
 				float x = vGetViewInt(view, 0)*0.1f;
 				float y = vGetViewInt(view, 1)*0.1f;
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_ONE, GL_ONE);
 				glBegin(GL_TRIANGLE_FAN);
 				glColor3f(r, g, b);
 				for (int i = 0; i < 12; ++i)
@@ -122,7 +134,6 @@ public:
 					glVertex2f(x + cos(a) * 10, y + sin(a) * 10);
 				}
 				glEnd();
-                glDisable(GL_BLEND);
 			}
 			if (vGetViewClass(view) == barClass)
 			{
@@ -139,7 +150,6 @@ public:
 				glEnd();
 			}
 		}
-		glPopMatrix();
 	}
 
 	void ConsumeUpdate(const std::vector<uint8_t> & buffer)
@@ -175,8 +185,15 @@ int main(int argc, char * argv []) try
         client1.ConsumeUpdate(buffer1);
 
 		glClear(GL_COLOR_BUFFER_BIT);
+		glPushMatrix();
+		glOrtho(0, 1280, 720, 0, -1, +1);
+        server.Draw();
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
 		client0.Draw(1,0,0);	
-        client1.Draw(0,1,1);	
+        client1.Draw(0,1,1);
+        glDisable(GL_BLEND);
+        glPopMatrix();
 		glfwSwapBuffers(win);
 	}
 

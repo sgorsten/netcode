@@ -11,13 +11,9 @@ struct VClass_
 	int numIntFields;
 };
 
-struct Field
-{
-    int offset, distIndex;
-};
-
 struct Class
 {
+    struct Field { int offset, distIndex; };
     VClass cl;
     int index, sizeBytes;
     std::vector<Field> fields;
