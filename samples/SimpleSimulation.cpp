@@ -4,68 +4,78 @@
 #include <random>
 #include <GLFW/glfw3.h>
 
-enum { NUM_BALLS = 50 };
-struct Ball { int px, py, vx, vy; };
+enum { NUM_OBJECTS = 50 };
+struct Object { int px, py, vx, vy; };
+struct Frame { Object objects[NUM_OBJECTS]; };
 
 class Server
 {
-	Ball balls[NUM_BALLS];
+	Frame current, last;
 	IntegerDistribution dist;
 public:
 	Server()
 	{
 		std::mt19937 engine;
-		for (auto & ball : balls)
+		for (auto & object : current.objects)
 		{
-			ball.px = std::uniform_int_distribution<int>(500, 12300)(engine);
-			ball.py = std::uniform_int_distribution<int>(500, 6700)(engine);
-			ball.vx = std::uniform_int_distribution<int>(-1000, +1000)(engine);
-			ball.vy = std::uniform_int_distribution<int>(-1000, +1000)(engine);
+			object.px = std::uniform_int_distribution<int>(500, 12300)(engine);
+			object.py = std::uniform_int_distribution<int>(500, 6700)(engine);
+			object.vx = std::uniform_int_distribution<int>(-1000, +1000)(engine);
+			object.vy = std::uniform_int_distribution<int>(-1000, +1000)(engine);
+		}
+		for (auto & object : last.objects)
+		{
+			object = { 0, 0, 0, 0 };
 		}
 	}
 
 	void Update(double timestep)
 	{
-		for (auto & ball : balls)
+		for (auto & object : current.objects)
 		{
-			ball.px += ball.vx * timestep;
-			ball.py += ball.vy * timestep;
-			if (ball.px < 200 && ball.vx < 0) ball.vx = -ball.vx;
-			if (ball.px > 12600 && ball.vx > 0) ball.vx = -ball.vx;
-			if (ball.py < 200 && ball.vy < 0) ball.vy = -ball.vy;
-			if (ball.py > 7000 && ball.vy > 0) ball.vy = -ball.vy;
+			object.px += object.vx * timestep;
+			object.py += object.vy * timestep;
+			if (object.px < 200 && object.vx < 0) object.vx = -object.vx;
+			if (object.px > 12600 && object.vx > 0) object.vx = -object.vx;
+			if (object.py < 200 && object.vy < 0) object.vy = -object.vy;
+			if (object.py > 7000 && object.vy > 0) object.vy = -object.vy;
 		}
 	}
 
 	void Encode(arith::Encoder & encoder)
 	{
-		for (auto & ball : balls)
+		for (int i = 0; i < NUM_OBJECTS; ++i)
 		{
-			dist.EncodeAndTally(encoder, ball.px);
-			dist.EncodeAndTally(encoder, ball.py);
+			dist.EncodeAndTally(encoder, current.objects[i].px - last.objects[i].px);
+			dist.EncodeAndTally(encoder, current.objects[i].py - last.objects[i].py);
 		}
+		last = current;
 	}
 };
 
 class Client
 {
-	Ball balls[NUM_BALLS];
+	Frame current, last;
 	IntegerDistribution dist;
 public:
-	void SetBalls(const Ball * b) { memcpy(balls, b, sizeof(balls)); }
+	Client()
+	{
+		memset(&current, 0, sizeof(current));
+		memset(&last, 0, sizeof(last));
+	}
 
 	void Draw() const
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 12800, 7200, 0, -1, +1);
-		for (auto & ball : balls)
+		for (auto & object : current.objects)
 		{
 			glBegin(GL_TRIANGLE_FAN);
 			for (int i = 0; i < 12; ++i)
 			{
 				float a = i*6.28f / 12;
-				glVertex2f(ball.px + cos(a) * 100, ball.py + sin(a) * 100);
+				glVertex2f(object.px + cos(a) * 100, object.py + sin(a) * 100);
 			}
 			glEnd();
 		}
@@ -74,10 +84,11 @@ public:
 
 	void Decode(arith::Decoder & decoder)
 	{
-		for (auto & ball : balls)
+		last = current;
+		for (int i = 0; i < NUM_OBJECTS; ++i)
 		{
-			ball.px = dist.DecodeAndTally(decoder);
-			ball.py = dist.DecodeAndTally(decoder);
+			current.objects[i].px = last.objects[i].px + dist.DecodeAndTally(decoder);
+			current.objects[i].py = last.objects[i].py + dist.DecodeAndTally(decoder);
 		}
 	}
 };
@@ -85,8 +96,6 @@ public:
 int main(int argc, char * argv []) try
 {
 	Server server;
-
-
 	Client client;
 
 	if (glfwInit() != GL_TRUE) throw std::runtime_error("glfwInit() failed.");
@@ -108,7 +117,7 @@ int main(int argc, char * argv []) try
 		arith::Encoder encoder(buffer);
 		server.Encode(encoder);
 		encoder.Finish();
-		std::cout << "Compressed state from " << (sizeof(Ball) * NUM_BALLS) << " B to " << buffer.size() << " B." << std::endl;
+		std::cout << "Compressed state from " << (sizeof(Object) * NUM_OBJECTS) << " B to " << buffer.size() << " B." << std::endl;
 
 		client.Decode(arith::Decoder(buffer));
 		client.Draw();	
