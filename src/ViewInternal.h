@@ -11,25 +11,46 @@ struct VClass_
 	int numIntFields;
 };
 
+struct Field
+{
+    int offset, distIndex;
+};
+
+struct Class
+{
+    VClass cl;
+    int index, sizeBytes;
+    std::vector<Field> fields;
+};
+
 struct VObject_
 {
     VServer server;
-	VClass objectClass;
-	std::vector<int> intFields;
-    std::map<int, std::vector<int>> frameIntFields;
+    const Class & cl;
+	std::vector<uint8_t> state;
+    std::map<int, std::vector<uint8_t>> frameState;
 
-	VObject_(VServer server, VClass cl);
+	VObject_(VServer server, const Class & cl);
 
-    int GetIntField(int frame, int index) const
+    void OnPublishFrame(int frame)
     {
-        auto it = frameIntFields.find(frame);
-        return it == end(frameIntFields) ? 0 : it->second[index];
+        frameState[frame] = state;
+    }
+
+    void SetIntField(int index, int value) { reinterpret_cast<int &>(state[cl.fields[index].offset]) = value; }
+
+    int GetIntField(int frame, int offset) const
+    {
+        auto it = frameState.find(frame);
+        return it == end(frameState) ? 0 : reinterpret_cast<const int &>(it->second[offset]);
     }
 };
 
 struct VServer_
 {
-	std::vector<VClass> classes;
+	std::vector<Class> classes;
+    size_t numIntDistributions;
+
 	std::vector<VObject> objects;
     std::vector<VPeer> peers;
     int frame;
@@ -47,7 +68,7 @@ struct VPeer_
     {
         const VObject_ * object; int frameAdded, frameRemoved; 
         bool isLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
-        int GetIntField(int frame, int index) const { return isLive(frame) ? object->GetIntField(frame, index) : 0; }
+        int GetIntField(int frame, int offset) const { return isLive(frame) ? object->GetIntField(frame, offset) : 0; }
     };
 
     VServer server;

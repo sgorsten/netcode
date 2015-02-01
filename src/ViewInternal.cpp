@@ -7,14 +7,26 @@ template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
 	return std::find(begin(vec), end(vec), value) - begin(vec);
 }
 
-VObject_::VObject_(VServer server, VClass cl) : server(server), objectClass(cl), intFields(cl->numIntFields, 0)
+VObject_::VObject_(VServer server, const Class & cl) : server(server), cl(cl), state(cl.sizeBytes, 0)
 {
     
 }
 
-VServer_::VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses), frame(0)
+VServer_::VServer_(const VClass * classes, size_t numClasses) : numIntDistributions(), frame()
 {
-
+    for(size_t i=0; i<numClasses; ++i)
+    {
+        Class cl;
+        cl.cl = classes[i];
+        cl.index = i;
+        cl.sizeBytes = 0;
+        for(int fieldIndex = 0; fieldIndex < classes[i]->numIntFields; ++fieldIndex)
+        {
+            cl.fields.push_back({cl.sizeBytes, numIntDistributions++});
+            cl.sizeBytes += sizeof(int);
+        }
+        this->classes.push_back(cl);
+    }
 }
 
 VPeer VServer_::CreatePeer()
@@ -26,32 +38,31 @@ VPeer VServer_::CreatePeer()
 
 VObject VServer_::CreateObject(VClass objectClass)
 {
-	// Validate that this is a class the server knows about
-	auto it = std::find(begin(classes), end(classes), objectClass);
-	if (it == end(classes)) return nullptr;
-
-	// Instantiate the object
-	auto object = new VObject_(this, objectClass);
-	objects.push_back(object);
-	return object;
+    for(auto & cl : classes)
+    {
+        if(cl.cl == objectClass)
+        {
+	        auto object = new VObject_(this, cl);
+	        objects.push_back(object);
+	        return object;
+        }
+    }
+    return nullptr;
 }
 
 void VServer_::PublishFrame()
 {
     ++frame;
-    for(auto object : objects) object->frameIntFields[frame] = object->intFields;
+    for(auto object : objects) object->OnPublishFrame(frame);
     for(auto peer : peers) peer->OnPublishFrame(frame);
 
     // Expire old frames
-    for(auto object : objects) object->frameIntFields.erase(frame - 3);
+    for(auto object : objects) object->frameState.erase(frame - 3);
 }
 
 VPeer_::VPeer_(VServer server) : server(server)
 {
-    int numIntFields = 0;
-	for (auto cl : server->classes) numIntFields += cl->numIntFields;
-	intFieldDists.resize(numIntFields);
-
+    intFieldDists.resize(server->numIntDistributions);
     prevFrame = 0;
     frame = 1;
 }
@@ -103,10 +114,7 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
 
 	// Encode classes of newly created objects
 	newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
-	for (auto object : newObjects)
-	{
-		EncodeUniform(encoder, GetIndex(server->classes, object->objectClass), server->classes.size());
-	}
+	for (auto object : newObjects) EncodeUniform(encoder, object->cl.index, server->classes.size());
 
 	// Encode updates for each view
     for(const auto & record : records)
@@ -114,18 +122,12 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
         if(!record.isLive(frame)) continue;
         auto object = record.object;
 
-		int firstIndex = 0;
-		for (auto cl : server->classes)
+        for(auto & field : object->cl.fields)
 		{
-			if (cl == object->objectClass) break;
-			firstIndex += cl->numIntFields;
-		}
-		for (int i = 0; i < object->objectClass->numIntFields; ++i)
-		{
-            int value = record.GetIntField(frame, i);
-            int prevValue = record.GetIntField(frame-1, i);
-            int prevPrevValue = record.GetIntField(frame-2, i);
-			intFieldDists[firstIndex + i].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
+            int value = record.GetIntField(frame, field.offset);
+            int prevValue = record.GetIntField(frame-1, field.offset);
+            int prevPrevValue = record.GetIntField(frame-2, field.offset);
+			intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
 		}
 	}
 

@@ -18,7 +18,7 @@ int vPublishUpdate(VPeer peer, void * buffer, int bufferSize)
 	return bytes.size();
 }
 
-void vSetObjectInt(VObject object, int index, int value) { object->intFields[index] = value; }
+void vSetObjectInt(VObject object, int index, int value) { object->SetIntField(index, value); }
 void vDestroyObject(VObject object)
 {
     for(auto peer : object->server->peers) peer->SetVisibility(object, false);
@@ -47,10 +47,14 @@ template<class K, class V> size_t MemUsage(const std::map<K,V> & map)
     for(auto & elem : map) total += MemUsage(elem);
     return total;
 }
+
+static size_t MemUsage(uint8_t) { return 0; }
 static size_t MemUsage(int) { return 0; }
 static size_t MemUsage(const VPeer_::ObjectRecord & r) { return 0; }
 static size_t MemUsage(const VClass_ * cl) { return sizeof(VClass_); }
-static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_) + MemUsage(obj->intFields) + MemUsage(obj->frameIntFields); }
+static size_t MemUsage(const Field & f) { return 0; }
+static size_t MemUsage(const Class & cl) { return MemUsage(cl.cl) + MemUsage(cl.fields); }
+static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_) + MemUsage(obj->state) + MemUsage(obj->frameState); }
 static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }
 int vDebugServerMemoryUsage(VServer server)
 {
