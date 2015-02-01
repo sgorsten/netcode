@@ -6,13 +6,12 @@
 #include <random>
 #include <GLFW/glfw3.h>
 
-enum { NUM_OBJECTS = 50 };
-struct PhysicsObject { float px, py, vx, vy; VObject vobj; };
-
 class Server
 {
+    struct PhysicsObject { float px, py, vx, vy; VObject vobj; };
+
 	VServer server;
-	PhysicsObject objects[NUM_OBJECTS];
+    std::vector<PhysicsObject> objects;
 	VObject bar;
 	float bp, bv;
 public:
@@ -22,6 +21,7 @@ public:
 		server = vCreateServer(classes, 2);
 
 		std::mt19937 engine;
+        objects.resize(50);
 		for (auto & object : objects)
 		{
 			object.px = std::uniform_real_distribution<float>(50, 1230)(engine);
@@ -39,9 +39,15 @@ public:
 	{
 		for (auto & object : objects)
 		{
+            if(!object.vobj) continue;
 			object.px += object.vx * timestep;
 			object.py += object.vy * timestep;
-			if (object.px < 20 && object.vx < 0) object.vx = -object.vx;
+			if (object.px < 20 && object.vx < 0)
+            {
+                vDestroyObject(object.vobj);
+                object.vobj = nullptr;
+                //object.vx = -object.vx;
+            }
 			if (object.px > 1260 && object.vx > 0) object.vx = -object.vx;
 			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
 			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
@@ -63,6 +69,7 @@ public:
 	{
 		for (auto & object : objects)
 		{
+            if(!object.vobj) continue;
 			vSetObjectInt(object.vobj, 0, object.px * 10);
 			vSetObjectInt(object.vobj, 1, object.py * 10);
 		}
@@ -158,7 +165,7 @@ int main(int argc, char * argv []) try
 		server.Update(static_cast<float>(timestep));
 
 		auto buffer = server.PublishUpdate();
-		std::cout << "Compressed state from " << (sizeof(int)*2*NUM_OBJECTS) << " B to " << buffer.size() << " B." << std::endl;
+		std::cout << "Compressed state from " << (sizeof(int)*2*50) << " B to " << buffer.size() << " B." << std::endl;
 
 		client.ConsumeUpdate(buffer);
 		client.Draw();	

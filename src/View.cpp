@@ -15,10 +15,11 @@ struct VClass_
 
 struct VObject_
 {
+    VServer server;
 	VClass objectClass;
 	std::vector<int> intFields, prevIntFields, prevPrevIntFields;
 
-	VObject_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields), prevPrevIntFields(intFields) {}
+	VObject_(VServer server, VClass cl) : server(server), objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields), prevPrevIntFields(intFields) {}
 };
 
 struct VServer_
@@ -26,7 +27,7 @@ struct VServer_
 	std::vector<VClass> classes;
 	std::vector<VObject> objects, prevObjects;
 	std::vector<IntegerDistribution> intFieldDists;
-	IntegerDistribution newObjectCountDist;
+	IntegerDistribution newObjectCountDist, delObjectCountDist;
 
 	VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses)
 	{
@@ -42,7 +43,7 @@ struct VServer_
 		if (it == end(classes)) return nullptr;
 
 		// Instantiate the object
-		auto object = new VObject_(objectClass);
+		auto object = new VObject_(this, objectClass);
 		objects.push_back(object);
 		return object;
 	}
@@ -51,6 +52,21 @@ struct VServer_
 	{
 		std::vector<uint8_t> bytes;
 		arith::Encoder encoder(bytes);
+
+        // Encode the indices of destroyed objects
+        std::vector<int> deletedIndices;
+        auto it = begin(objects);
+        for(int i=0; i<prevObjects.size(); ++i)
+        {
+            if(it != end(objects) && *it == prevObjects[i]) ++it;
+            else deletedIndices.push_back(i);
+        }
+        if(!deletedIndices.empty())
+        {
+            int x = 5;
+        }
+        delObjectCountDist.EncodeAndTally(encoder, deletedIndices.size());
+        for(auto index : deletedIndices) EncodeUniform(encoder, index, prevObjects.size());
 
 		// Encode classes of newly created objects
 		newObjectCountDist.EncodeAndTally(encoder, objects.size() - prevObjects.size());
@@ -95,7 +111,7 @@ struct VClient_
 	std::vector<VClass> classes;
 	std::vector<VView> views;
 	std::vector<IntegerDistribution> intFieldDists;
-	IntegerDistribution newObjectCountDist;
+	IntegerDistribution newObjectCountDist, delObjectCountDist;
 
 	VClient_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses)
 	{
@@ -108,6 +124,16 @@ struct VClient_
 	{
 		std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
 		arith::Decoder decoder(bytes);
+
+        // Decode indices of deleted objects
+        int delObjects = delObjectCountDist.DecodeAndTally(decoder);
+        for(int i=0; i<delObjects; ++i)
+        {
+            int index = DecodeUniform(decoder, views.size());
+            delete views[index];
+            views[index] = 0;
+        }
+        views.erase(remove_if(begin(views), end(views), [](VView v) { return !v; }), end(views));
 
 		// Decode classes of newly created objects, and instantiate corresponding views
 		int newObjects = newObjectCountDist.DecodeAndTally(decoder);
@@ -155,16 +181,23 @@ VObject vCreateObject(VServer server, VClass objectClass)
 	return server->CreateObject(objectClass);
 }
 
-void vSetObjectInt(VObject object, int index, int value)
-{
-	object->intFields[index] = value;
-}
-
 int vPublishUpdate(VServer server, void * buffer, int bufferSize)
 {
 	auto bytes = server->PublishUpdate();
 	memcpy(buffer, bytes.data(), std::min(bytes.size(), size_t(bufferSize)));
 	return bytes.size();
+}
+
+void vSetObjectInt(VObject object, int index, int value)
+{
+	object->intFields[index] = value;
+}
+
+void vDestroyObject(VObject object)
+{
+    auto it = std::find(begin(object->server->objects), end(object->server->objects), object);
+    if(it != end(object->server->objects)) object->server->objects.erase(it);
+    delete object;
 }
 
 VClient vCreateClient(const VClass * classes, int numClasses)
