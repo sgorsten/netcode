@@ -11,6 +11,7 @@ class Server
     struct PhysicsObject { float px, py, vx, vy; VObject vobj; };
 
 	VServer server;
+    VPeer peer1, peer2;
     std::vector<PhysicsObject> objects;
 	VObject bar;
 	float bp, bv;
@@ -19,6 +20,8 @@ public:
 	{
 		const VClass classes[] = {vCreateClass(2), vCreateClass(4)};
 		server = vCreateServer(classes, 2);
+        peer1 = vCreatePeer(server);
+        peer2 = vCreatePeer(server);
 
 		std::mt19937 engine;
         objects.resize(50);
@@ -31,6 +34,7 @@ public:
 			object.vobj = vCreateObject(server, classes[0]);
 		}
 		bar = vCreateObject(server, classes[1]);
+        vSetVisibility(peer1, bar, 1);
 		bp = 100;
 		bv = -25;
 	}
@@ -40,18 +44,26 @@ public:
 		for (auto & object : objects)
 		{
             if(!object.vobj) continue;
+
 			object.px += object.vx * timestep;
 			object.py += object.vy * timestep;
 			if (object.px < 20 && object.vx < 0)
             {
                 vDestroyObject(object.vobj);
                 object.vobj = nullptr;
+                continue;
                 //object.vx = -object.vx;
             }
 			if (object.px > 1260 && object.vx > 0) object.vx = -object.vx;
 			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
 			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
+
+			vSetObjectInt(object.vobj, 0, object.px * 10);
+			vSetObjectInt(object.vobj, 1, object.py * 10);
+            vSetVisibility(peer1, object.vobj, object.px < 800 && object.py < 500);
+            vSetVisibility(peer2, object.vobj, object.px > 480 && object.py > 220);
 		}
+
 		bp += bv * timestep;
 		if (bp < 10 && bv < 0)
 		{
@@ -63,24 +75,17 @@ public:
 			bp = 100;
 			bv = -bv;
 		}
-	}
-
-	std::vector<uint8_t> PublishUpdate()
-	{
-		for (auto & object : objects)
-		{
-            if(!object.vobj) continue;
-			vSetObjectInt(object.vobj, 0, object.px * 10);
-			vSetObjectInt(object.vobj, 1, object.py * 10);
-		}
 
 		vSetObjectInt(bar, 0, bp);
 		vSetObjectInt(bar, 1, (100 - bp) * 255 / 100);
 		vSetObjectInt(bar, 2, bp * 255 / 100);
 		vSetObjectInt(bar, 3, 32);
+	}
 
+	std::vector<uint8_t> PublishUpdate(int peer)
+	{
 		uint8_t buffer[2048];
-		int used = vPublishUpdate(server, buffer, sizeof(buffer));
+		int used = vPublishUpdate(peer ? peer2 : peer1, buffer, sizeof(buffer));
 		if (used > sizeof(buffer)) throw std::runtime_error("Buffer not large enough.");
 		return {buffer, buffer + used};
 	}
@@ -99,9 +104,8 @@ public:
 		client = vCreateClient(classes, 2);
 	}
 
-	void Draw() const
+	void Draw(float r, float g, float b) const
 	{
-		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
 		for (int i = 0, n = vGetViewCount(client); i < n; ++i)
@@ -111,14 +115,17 @@ public:
 			{
 				float x = vGetViewInt(view, 0)*0.1f;
 				float y = vGetViewInt(view, 1)*0.1f;
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_ONE, GL_ONE);
 				glBegin(GL_TRIANGLE_FAN);
-				glColor3f(1, 1, 1);
+				glColor3f(r, g, b);
 				for (int i = 0; i < 12; ++i)
 				{
 					float a = i*6.28f / 12;
 					glVertex2f(x + cos(a) * 10, y + sin(a) * 10);
 				}
 				glEnd();
+                glDisable(GL_BLEND);
 			}
 			if (vGetViewClass(view) == barClass)
 			{
@@ -147,7 +154,7 @@ public:
 int main(int argc, char * argv []) try
 {
 	Server server;
-	Client client;
+	Client client0,client1;
 
 	if (glfwInit() != GL_TRUE) throw std::runtime_error("glfwInit() failed.");
 	auto win = glfwCreateWindow(1280, 720, "Simple Simulation", nullptr, nullptr);
@@ -164,11 +171,15 @@ int main(int argc, char * argv []) try
 		t0 = t1;
 		server.Update(static_cast<float>(timestep));
 
-		auto buffer = server.PublishUpdate();
-		std::cout << "Compressed state from " << (sizeof(int)*2*50) << " B to " << buffer.size() << " B." << std::endl;
+		auto buffer0 = server.PublishUpdate(0);
+        auto buffer1 = server.PublishUpdate(1);
+		std::cout << "Sending " << buffer0.size() << " B to client 0 and " << buffer1.size() << " B to client 1." << std::endl;
+		client0.ConsumeUpdate(buffer0);
+        client1.ConsumeUpdate(buffer1);
 
-		client.ConsumeUpdate(buffer);
-		client.Draw();	
+		glClear(GL_COLOR_BUFFER_BIT);
+		client0.Draw(1,0,0);	
+        client1.Draw(0,1,1);	
 		glfwSwapBuffers(win);
 	}
 

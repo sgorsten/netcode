@@ -18,6 +18,9 @@
     <ClInclude Include="..\include\View.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\ViewInternal.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp">
@@ -27,6 +30,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\View.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\ViewInternal.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
