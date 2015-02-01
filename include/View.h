@@ -15,6 +15,7 @@ VClient vCreateClient  (const VClass * classes, int numClasses);
 
 VPeer   vCreatePeer    (VServer server);
 VObject vCreateObject  (VServer server, VClass objectClass);
+void    vPublishFrame  (VServer server);
 
 void    vSetVisibility (VPeer peer, VObject object, int isVisible);
 int     vPublishUpdate (VPeer peer, void * buffer, int bufferSize);
@@ -28,5 +29,7 @@ VView   vGetView       (VClient client, int index);
 
 VClass  vGetViewClass  (VView view);
 int     vGetViewInt    (VView view, int index);
+
+int vDebugServerMemoryUsage(VServer server);
 
 #endif

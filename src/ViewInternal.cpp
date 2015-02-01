@@ -7,12 +7,12 @@ template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
 	return std::find(begin(vec), end(vec), value) - begin(vec);
 }
 
-VObject_::VObject_(VServer server, VClass cl) : server(server), objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields), prevPrevIntFields(intFields) 
+VObject_::VObject_(VServer server, VClass cl) : server(server), objectClass(cl), intFields(cl->numIntFields, 0)
 {
     
 }
 
-VServer_::VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses)
+VServer_::VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses), frame(0)
 {
 
 }
@@ -36,6 +36,16 @@ VObject VServer_::CreateObject(VClass objectClass)
 	return object;
 }
 
+void VServer_::PublishFrame()
+{
+    ++frame;
+    for(auto object : objects) object->frameIntFields[frame] = object->intFields;
+    for(auto peer : peers) peer->OnPublishFrame(frame);
+
+    // Expire old frames
+    for(auto object : objects) object->frameIntFields.erase(frame - 3);
+}
+
 VPeer_::VPeer_(VServer server) : server(server)
 {
     int numIntFields = 0;
@@ -46,20 +56,24 @@ VPeer_::VPeer_(VServer server) : server(server)
     frame = 1;
 }
 
-void VPeer_::SetVisibility(VObject object, bool setVisible)
+void VPeer_::OnPublishFrame(int frame)
 {
-    for(auto & record : records)
+    for(auto change : visChanges)
     {
-        if(record.object != object) continue;
-        if(!record.isLive(frame)) continue;
-        if(!setVisible) record.frameRemoved = frame; // Remove object if we were asked to 
-        return;                                      // Object is now in the state we wanted
+        auto it = std::find_if(begin(records), end(records), [=](ObjectRecord & r) { return r.object == change.first && r.isLive(frame); });
+        if((it != end(records)) == change.second) continue; // If object visibility is as desired, skip this change
+        if(change.second) records.push_back({change.first, frame, INT_MAX}); // Make object visible
+        else it->frameRemoved = frame; // Make object invisible
     }
+    visChanges.clear();
+    this->frame = frame;
 
-    if(setVisible) // Otherwise, no live record of this object, create one if asked to
-    {
-        records.push_back({object, frame, INT_MAX});
-    }
+    records.erase(remove_if(begin(records), end(records), [=](ObjectRecord & r) { return r.frameRemoved < frame-2; }), end(records));
+}
+
+void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
+{
+    visChanges.push_back({object,setVisible});
 }
 
 std::vector<uint8_t> VPeer_::PublishUpdate()
@@ -69,7 +83,7 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
-    std::vector<VObject> newObjects;
+    std::vector<const VObject_ *> newObjects;
     int index = 0;
     for(const auto & record : records)
     {
@@ -108,14 +122,14 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
 		}
 		for (int i = 0; i < object->objectClass->numIntFields; ++i)
 		{
-			intFieldDists[firstIndex + i].EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i] * 2 + object->prevPrevIntFields[i]);
+            int value = record.GetIntField(frame, i);
+            int prevValue = record.GetIntField(frame-1, i);
+            int prevPrevValue = record.GetIntField(frame-2, i);
+			intFieldDists[firstIndex + i].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
 		}
-		object->prevPrevIntFields = object->prevIntFields;
-		object->prevIntFields = object->intFields;
 	}
 
     prevFrame = frame;
-    ++frame;
 
 	encoder.Finish();
 	return bytes;

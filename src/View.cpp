@@ -8,6 +8,7 @@ VClient vCreateClient(const VClass * classes, int numClasses) {	return new VClie
 
 VPeer vCreatePeer(VServer server) { return server->CreatePeer(); }
 VObject vCreateObject(VServer server, VClass objectClass) {	return server->CreateObject(objectClass); }
+void vPublishFrame(VServer server) { return server->PublishFrame(); }
 
 void vSetVisibility(VPeer peer, VObject object, int isVisible) { peer->SetVisibility(object, !!isVisible); }
 int vPublishUpdate(VPeer peer, void * buffer, int bufferSize)
@@ -32,3 +33,26 @@ int vGetViewCount(VClient client) { return client->views.size(); }
 VView vGetView(VClient client, int index) {	return client->views[index];}
 VClass vGetViewClass(VView view) { return view->objectClass; }
 int vGetViewInt(VView view, int index) { return view->intFields[index]; }
+
+template<class A, class B> size_t MemUsage(const std::pair<A,B> & pair) { return MemUsage(pair.first) + MemUsage(pair.second); }
+template<class T> size_t MemUsage(const std::vector<T> & vec)
+{
+    size_t total = vec.capacity() * sizeof(T);
+    for(auto & elem : vec) total += MemUsage(elem);
+    return total;
+}
+template<class K, class V> size_t MemUsage(const std::map<K,V> & map)
+{
+    size_t total = map.size() * sizeof(std::pair<K,V>);
+    for(auto & elem : map) total += MemUsage(elem);
+    return total;
+}
+static size_t MemUsage(int) { return 0; }
+static size_t MemUsage(const VPeer_::ObjectRecord & r) { return 0; }
+static size_t MemUsage(const VClass_ * cl) { return sizeof(VClass_); }
+static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_) + MemUsage(obj->intFields) + MemUsage(obj->frameIntFields); }
+static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }
+int vDebugServerMemoryUsage(VServer server)
+{
+    return sizeof(VServer_) + MemUsage(server->classes) + MemUsage(server->objects) + MemUsage(server->peers);
+}

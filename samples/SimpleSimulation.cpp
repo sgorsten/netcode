@@ -47,13 +47,7 @@ public:
 
 			object.px += object.vx * timestep;
 			object.py += object.vy * timestep;
-			if (object.px < 20 && object.vx < 0)
-            {
-                vDestroyObject(object.vobj);
-                object.vobj = nullptr;
-                continue;
-                //object.vx = -object.vx;
-            }
+			if (object.px < 20 && object.vx < 0) object.vx = -object.vx;
 			if (object.px > 1260 && object.vx > 0) object.vx = -object.vx;
 			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
 			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
@@ -80,6 +74,9 @@ public:
 		vSetObjectInt(bar, 1, (100 - bp) * 255 / 100);
 		vSetObjectInt(bar, 2, bp * 255 / 100);
 		vSetObjectInt(bar, 3, 32);
+
+        vPublishFrame(server);
+        // std::cout << "Timestep " << timestep << ", server memory use: " << vDebugServerMemoryUsage(server) << " B." << std::endl;
 	}
 
 	std::vector<uint8_t> PublishUpdate(int peer)
