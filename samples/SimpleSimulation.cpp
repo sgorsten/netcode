@@ -1,95 +1,98 @@
-#include "Distribution.h"
+#include "View.h"
 
+#include <cstdint>
+#include <vector>
 #include <iostream>
 #include <random>
 #include <GLFW/glfw3.h>
 
 enum { NUM_OBJECTS = 50 };
-struct Object { int px, py, vx, vy; };
-struct Frame { Object objects[NUM_OBJECTS]; };
+struct PhysicsObject { float px, py, vx, vy; VObject vobj; };
 
 class Server
 {
-	Frame current, last;
-	IntegerDistribution dist;
+	VServer server;
+	PhysicsObject objects[NUM_OBJECTS];
 public:
 	Server()
 	{
+		VClass cl = vCreateClass(2);
+		server = vCreateServer(&cl, 1);
+
 		std::mt19937 engine;
-		for (auto & object : current.objects)
+		for (auto & object : objects)
 		{
-			object.px = std::uniform_int_distribution<int>(500, 12300)(engine);
-			object.py = std::uniform_int_distribution<int>(500, 6700)(engine);
-			object.vx = std::uniform_int_distribution<int>(-1000, +1000)(engine);
-			object.vy = std::uniform_int_distribution<int>(-1000, +1000)(engine);
-		}
-		for (auto & object : last.objects)
-		{
-			object = { 0, 0, 0, 0 };
+			object.px = std::uniform_real_distribution<float>(50, 1230)(engine);
+			object.py = std::uniform_real_distribution<float>(50, 670)(engine);
+			object.vx = std::uniform_real_distribution<float>(-100, +100)(engine);
+			object.vy = std::uniform_real_distribution<float>(-100, +100)(engine);
+			object.vobj = vCreateServerObject(server, cl);
 		}
 	}
 
-	void Update(double timestep)
+	void Update(float timestep)
 	{
-		for (auto & object : current.objects)
+		for (auto & object : objects)
 		{
 			object.px += object.vx * timestep;
 			object.py += object.vy * timestep;
-			if (object.px < 200 && object.vx < 0) object.vx = -object.vx;
-			if (object.px > 12600 && object.vx > 0) object.vx = -object.vx;
-			if (object.py < 200 && object.vy < 0) object.vy = -object.vy;
-			if (object.py > 7000 && object.vy > 0) object.vy = -object.vy;
+			if (object.px < 20 && object.vx < 0) object.vx = -object.vx;
+			if (object.px > 1260 && object.vx > 0) object.vx = -object.vx;
+			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
+			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
 		}
 	}
 
-	void Encode(arith::Encoder & encoder)
+	std::vector<uint8_t> PublishUpdate()
 	{
-		for (int i = 0; i < NUM_OBJECTS; ++i)
+		for (auto & object : objects)
 		{
-			dist.EncodeAndTally(encoder, current.objects[i].px - last.objects[i].px);
-			dist.EncodeAndTally(encoder, current.objects[i].py - last.objects[i].py);
+			const int fields[] = { static_cast<int>(object.px * 10), static_cast<int>(object.py * 10) };
+			vSetObjectState(object.vobj, fields);
 		}
-		last = current;
+
+		uint8_t buffer[2048];
+		int used = vPublishUpdate(server, buffer, sizeof(buffer));
+		if (used > sizeof(buffer)) throw std::runtime_error("Buffer not large enough.");
+		return {buffer, buffer + used};
 	}
 };
 
 class Client
 {
-	Frame current, last;
-	IntegerDistribution dist;
+	VClient client;
+	VObject objects[NUM_OBJECTS];
 public:
 	Client()
 	{
-		memset(&current, 0, sizeof(current));
-		memset(&last, 0, sizeof(last));
+		auto cl = vCreateClass(2);
+		client = vCreateClient(&cl, 1);
+		for (auto & object : objects) object = vCreateClientObject(client, cl);
 	}
 
 	void Draw() const
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
-		glOrtho(0, 12800, 7200, 0, -1, +1);
-		for (auto & object : current.objects)
+		glOrtho(0, 1280, 720, 0, -1, +1);
+		for (auto object : objects)
 		{
+			int pos[2];
+			vGetObjectState(object, pos);
 			glBegin(GL_TRIANGLE_FAN);
 			for (int i = 0; i < 12; ++i)
 			{
 				float a = i*6.28f / 12;
-				glVertex2f(object.px + cos(a) * 100, object.py + sin(a) * 100);
+				glVertex2f(pos[0]*0.1f + cos(a)*10, pos[1]*0.1f + sin(a)*10);
 			}
 			glEnd();
 		}
 		glPopMatrix();
 	}
 
-	void Decode(arith::Decoder & decoder)
+	void ConsumeUpdate(const std::vector<uint8_t> & buffer)
 	{
-		last = current;
-		for (int i = 0; i < NUM_OBJECTS; ++i)
-		{
-			current.objects[i].px = last.objects[i].px + dist.DecodeAndTally(decoder);
-			current.objects[i].py = last.objects[i].py + dist.DecodeAndTally(decoder);
-		}
+		vConsumeUpdate(client, buffer.data(), buffer.size());
 	}
 };
 
@@ -111,15 +114,12 @@ int main(int argc, char * argv []) try
 		const double t1 = glfwGetTime(), timestep = t1 - t0;
 		if (timestep < 1.0 / 60) continue;
 		t0 = t1;
-		server.Update(timestep);
+		server.Update(static_cast<float>(timestep));
 
-		std::vector<uint8_t> buffer;
-		arith::Encoder encoder(buffer);
-		server.Encode(encoder);
-		encoder.Finish();
-		std::cout << "Compressed state from " << (sizeof(Object) * NUM_OBJECTS) << " B to " << buffer.size() << " B." << std::endl;
+		auto buffer = server.PublishUpdate();
+		std::cout << "Compressed state from " << (sizeof(int)*2*NUM_OBJECTS) << " B to " << buffer.size() << " B." << std::endl;
 
-		client.Decode(arith::Decoder(buffer));
+		client.ConsumeUpdate(buffer);
 		client.Draw();	
 		glfwSwapBuffers(win);
 	}

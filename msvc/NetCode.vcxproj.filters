@@ -15,12 +15,18 @@
     <ClInclude Include="..\include\Distribution.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\View.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Distribution.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\View.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
