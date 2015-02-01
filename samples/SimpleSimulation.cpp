@@ -13,11 +13,13 @@ class Server
 {
 	VServer server;
 	PhysicsObject objects[NUM_OBJECTS];
+	VObject bar;
+	float bp, bv;
 public:
 	Server()
 	{
-		VClass cl = vCreateClass(2);
-		server = vCreateServer(&cl, 1);
+		const VClass classes[] = {vCreateClass(2), vCreateClass(4)};
+		server = vCreateServer(classes, 2);
 
 		std::mt19937 engine;
 		for (auto & object : objects)
@@ -26,8 +28,11 @@ public:
 			object.py = std::uniform_real_distribution<float>(50, 670)(engine);
 			object.vx = std::uniform_real_distribution<float>(-100, +100)(engine);
 			object.vy = std::uniform_real_distribution<float>(-100, +100)(engine);
-			object.vobj = vCreateObject(server, cl);
+			object.vobj = vCreateObject(server, classes[0]);
 		}
+		bar = vCreateObject(server, classes[1]);
+		bp = 100;
+		bv = -25;
 	}
 
 	void Update(float timestep)
@@ -41,6 +46,17 @@ public:
 			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
 			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
 		}
+		bp += bv * timestep;
+		if (bp < 10 && bv < 0)
+		{
+			bp = 10;
+			bv = -bv;
+		}
+		if (bp > 100 && bv > 0)
+		{
+			bp = 100;
+			bv = -bv;
+		}
 	}
 
 	std::vector<uint8_t> PublishUpdate()
@@ -51,6 +67,11 @@ public:
 			vSetObjectInt(object.vobj, 1, object.py * 10);
 		}
 
+		vSetObjectInt(bar, 0, bp);
+		vSetObjectInt(bar, 1, (100 - bp) * 255 / 100);
+		vSetObjectInt(bar, 2, bp * 255 / 100);
+		vSetObjectInt(bar, 3, 32);
+
 		uint8_t buffer[2048];
 		int used = vPublishUpdate(server, buffer, sizeof(buffer));
 		if (used > sizeof(buffer)) throw std::runtime_error("Buffer not large enough.");
@@ -60,13 +81,15 @@ public:
 
 class Client
 {
-	VClass objectClass;
+	VClass objectClass, barClass;
 	VClient client;
 public:
 	Client()
 	{
 		objectClass = vCreateClass(2);
-		client = vCreateClient(&objectClass, 1);
+		barClass = vCreateClass(4);
+		const VClass classes [] = { objectClass, barClass };
+		client = vCreateClient(classes, 2);
 	}
 
 	void Draw() const
@@ -82,11 +105,26 @@ public:
 				float x = vGetViewInt(view, 0)*0.1f;
 				float y = vGetViewInt(view, 1)*0.1f;
 				glBegin(GL_TRIANGLE_FAN);
+				glColor3f(1, 1, 1);
 				for (int i = 0; i < 12; ++i)
 				{
 					float a = i*6.28f / 12;
 					glVertex2f(x + cos(a) * 10, y + sin(a) * 10);
 				}
+				glEnd();
+			}
+			if (vGetViewClass(view) == barClass)
+			{
+				int p = vGetViewInt(view, 0);
+				int r = vGetViewInt(view, 1);
+				int g = vGetViewInt(view, 2);
+				int b = vGetViewInt(view, 3);
+				glBegin(GL_QUADS);
+				glColor3ub(r, g, b);
+				glVertex2i(10, 10);
+				glVertex2i(10 + p, 10);
+				glVertex2i(10 + p, 20);
+				glVertex2i(10, 20);
 				glEnd();
 			}
 		}
