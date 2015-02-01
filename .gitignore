@@ -1,5 +1,3 @@
 /bin
+/lib
 /obj
-*.opensdf
-*.sdf
-*.suo
