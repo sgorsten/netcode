@@ -16,9 +16,9 @@ struct VClass_
 struct VObject_
 {
 	VClass objectClass;
-	std::vector<int> intFields, prevIntFields;
+	std::vector<int> intFields, prevIntFields, prevPrevIntFields;
 
-	VObject_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields) {}
+	VObject_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields), prevPrevIntFields(intFields) {}
 };
 
 struct VServer_
@@ -71,8 +71,9 @@ struct VServer_
 			}
 			for (int i = 0; i < object->objectClass->numIntFields; ++i)
 			{
-				intFieldDists[firstIndex+i].EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i]);
+				intFieldDists[firstIndex + i].EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i] * 2 + object->prevPrevIntFields[i]);
 			}
+			object->prevPrevIntFields = object->prevIntFields;
 			object->prevIntFields = object->intFields;
 		}
 
@@ -84,9 +85,9 @@ struct VServer_
 struct VView_
 {
 	VClass objectClass;
-	std::vector<int> intFields;
+	std::vector<int> intFields, prevIntFields;
 
-	VView_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0) {}
+	VView_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields) {}
 };
 
 struct VClient_
@@ -126,7 +127,10 @@ struct VClient_
 			}
 			for (int i = 0; i < view->objectClass->numIntFields; ++i)
 			{
-				view->intFields[i] += intFieldDists[firstIndex + i].DecodeAndTally(decoder);
+				auto prev = view->intFields[i];
+				auto delta = prev - view->prevIntFields[i];
+				view->intFields[i] += delta + intFieldDists[firstIndex + i].DecodeAndTally(decoder);
+				view->prevIntFields[i] = prev;
 			}
 		}
 	}
