@@ -76,8 +76,9 @@ public:
 		vSetObjectInt(bar, 3, 32);
 
         vPublishFrame(server);
-        std::cout << "Timestep " << timestep << ", server memory use: " << vDebugServerMemoryUsage(server) << " B." << std::endl;
 	}
+
+    size_t GetMemUsage() const { return vDebugServerMemoryUsage(server); }
 
     void Draw() const
     {
@@ -95,13 +96,19 @@ public:
         }
     }
 
-	std::vector<uint8_t> PublishUpdate(int peer)
+	std::vector<uint8_t> ProduceUpdate(int peer)
 	{
-		uint8_t buffer[2048];
-		int used = vPublishUpdate(peer ? peer2 : peer1, buffer, sizeof(buffer));
-		if (used > sizeof(buffer)) throw std::runtime_error("Buffer not large enough.");
-		return {buffer, buffer + used};
+        auto blob = vProduceUpdate(peer ? peer2 : peer1);
+        std::vector<uint8_t> buffer(vGetBlobSize(blob));
+        memcpy(buffer.data(), vGetBlobData(blob), buffer.size());
+        vFreeBlob(blob);
+        return buffer;
 	}
+
+    void ConsumeResponse(int peer, const std::vector<uint8_t> & buffer)
+    {
+        vConsumeResponse(peer ? peer2 : peer1, buffer.data(), buffer.size());
+    }
 };
 
 class Client
@@ -116,6 +123,8 @@ public:
 		const VClass classes [] = { objectClass, barClass };
 		client = vCreateClient(classes, 2);
 	}
+
+    size_t GetMemUsage() const { return vDebugClientMemoryUsage(client); }
 
 	void Draw(float r, float g, float b) const
 	{
@@ -152,9 +161,15 @@ public:
 		}
 	}
 
-	void ConsumeUpdate(const std::vector<uint8_t> & buffer)
+	std::vector<uint8_t> Update(const std::vector<uint8_t> & buffer)
 	{
 		vConsumeUpdate(client, buffer.data(), buffer.size());
+
+        auto blob = vProduceResponse(client);
+        std::vector<uint8_t> response(vGetBlobSize(blob));
+        memcpy(response.data(), vGetBlobData(blob), response.size());
+        vFreeBlob(blob);
+        return response;
 	}
 };
 
@@ -178,11 +193,12 @@ int main(int argc, char * argv []) try
 		t0 = t1;
 		server.Update(static_cast<float>(timestep));
 
-		auto buffer0 = server.PublishUpdate(0);
-        auto buffer1 = server.PublishUpdate(1);
-		std::cout << "Sending " << buffer0.size() << " B to client 0 and " << buffer1.size() << " B to client 1." << std::endl;
-		client0.ConsumeUpdate(buffer0);
-        client1.ConsumeUpdate(buffer1);
+		auto buffer0 = server.ProduceUpdate(0);
+        auto buffer1 = server.ProduceUpdate(1);
+		auto response0 = client0.Update(buffer0);
+        auto response1 = client1.Update(buffer1);
+        server.ConsumeResponse(0, response0);
+        server.ConsumeResponse(1, response1);
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
@@ -195,6 +211,8 @@ int main(int argc, char * argv []) try
         glDisable(GL_BLEND);
         glPopMatrix();
 		glfwSwapBuffers(win);
+
+        std::cout << server.GetMemUsage() << " " << client0.GetMemUsage() << " " << client1.GetMemUsage() << " " << buffer0.size() << " " << buffer1.size() << std::endl;
 	}
 
 	glfwDestroyWindow(win);
