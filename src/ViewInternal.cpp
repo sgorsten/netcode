@@ -7,9 +7,20 @@ template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
 	return std::find(begin(vec), end(vec), value) - begin(vec);
 }
 
-VObject_::VObject_(VServer server, const Class & cl) : server(server), cl(cl), state(cl.sizeBytes, 0)
+VObject_::VObject_(VServer server, const Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
+}
+
+void VObject_::SetIntField(int index, int value)
+{ 
+    reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
+}
+
+int VObject_::GetIntField(int frame, int offset) const
+{
+    auto it = server->frameState.find(frame);
+    return it == end(server->frameState) ? 0 : reinterpret_cast<const int &>(it->second[stateOffset + offset]);
 }
 
 VServer_::VServer_(const VClass * classes, size_t numClasses) : numIntDistributions(), frame()
@@ -42,7 +53,8 @@ VObject VServer_::CreateObject(VClass objectClass)
     {
         if(cl.cl == objectClass)
         {
-	        auto object = new VObject_(this, cl);
+	        auto object = new VObject_(this, cl, state.size());
+            state.resize(state.size() + cl.sizeBytes, 0);
 	        objects.push_back(object);
 	        return object;
         }
@@ -53,11 +65,11 @@ VObject VServer_::CreateObject(VClass objectClass)
 void VServer_::PublishFrame()
 {
     ++frame;
-    for(auto object : objects) object->OnPublishFrame(frame);
+    frameState[frame] = state;
     for(auto peer : peers) peer->OnPublishFrame(frame);
 
     // Expire old frames
-    for(auto object : objects) object->frameState.erase(frame - 3);
+    frameState.erase(frame-3);
 }
 
 VPeer_::VPeer_(VServer server) : server(server)

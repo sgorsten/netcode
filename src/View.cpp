@@ -54,9 +54,9 @@ static size_t MemUsage(const VPeer_::ObjectRecord & r) { return 0; }
 static size_t MemUsage(const VClass_ * cl) { return sizeof(VClass_); }
 static size_t MemUsage(const Field & f) { return 0; }
 static size_t MemUsage(const Class & cl) { return MemUsage(cl.cl) + MemUsage(cl.fields); }
-static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_) + MemUsage(obj->state) + MemUsage(obj->frameState); }
+static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_); }
 static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }
 int vDebugServerMemoryUsage(VServer server)
 {
-    return sizeof(VServer_) + MemUsage(server->classes) + MemUsage(server->objects) + MemUsage(server->peers);
+    return sizeof(VServer_) + MemUsage(server->classes) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
 }

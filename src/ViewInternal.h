@@ -27,23 +27,12 @@ struct VObject_
 {
     VServer server;
     const Class & cl;
-	std::vector<uint8_t> state;
-    std::map<int, std::vector<uint8_t>> frameState;
+	int stateOffset;
 
-	VObject_(VServer server, const Class & cl);
+	VObject_(VServer server, const Class & cl, int stateOffset);
 
-    void OnPublishFrame(int frame)
-    {
-        frameState[frame] = state;
-    }
-
-    void SetIntField(int index, int value) { reinterpret_cast<int &>(state[cl.fields[index].offset]) = value; }
-
-    int GetIntField(int frame, int offset) const
-    {
-        auto it = frameState.find(frame);
-        return it == end(frameState) ? 0 : reinterpret_cast<const int &>(it->second[offset]);
-    }
+    void SetIntField(int index, int value);
+    int GetIntField(int frame, int offset) const;
 };
 
 struct VServer_
@@ -53,6 +42,9 @@ struct VServer_
 
 	std::vector<VObject> objects;
     std::vector<VPeer> peers;
+
+	std::vector<uint8_t> state;
+    std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
 	VServer_(const VClass * classes, size_t numClasses);
