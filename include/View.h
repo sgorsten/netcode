@@ -17,9 +17,10 @@ void vSetObjectInt(VObject object, int index, int value);
 int vPublishUpdate(VServer server, void * buffer, int bufferSize);
 
 VClient vCreateClient(const VClass * classes, int numClasses);
-VView vCreateView(VClient client, VClass viewClass);
 void vConsumeUpdate(VClient client, const void * buffer, int bufferSize);
-
-int vGetViewInt(VView object, int index);
+int vGetViewCount(VClient client);
+VView vGetView(VClient client, int index);
+VClass vGetViewClass(VView view);
+int vGetViewInt(VView view, int index);
 
 #endif

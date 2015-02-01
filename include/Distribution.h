@@ -3,6 +3,9 @@
 
 #include "ArithCode.h"
 
+void EncodeUniform(arith::Encoder & encoder, arith::code_t x, arith::code_t d);
+arith::code_t DecodeUniform(arith::Decoder & decoder, arith::code_t d);
+
 class IntegerDistribution
 {
 	arith::code_t counts[32];

@@ -3,6 +3,11 @@
 
 #include <algorithm>
 
+template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
+{
+	return std::find(begin(vec), end(vec), value) - begin(vec);
+}
+
 struct VClass_
 {
 	int numIntFields;
@@ -19,8 +24,50 @@ struct VObject_
 struct VServer_
 {
 	std::vector<VClass> classes;
-	std::vector<VObject> objects;
+	std::vector<VObject> objects, prevObjects;
 	IntegerDistribution dist;
+	IntegerDistribution newObjectCountDist;
+
+	VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses) {}
+
+	VObject CreateObject(VClass objectClass)
+	{
+		// Validate that this is a class the server knows about
+		auto it = std::find(begin(classes), end(classes), objectClass);
+		if (it == end(classes)) return nullptr;
+
+		// Instantiate the object
+		auto object = new VObject_(objectClass);
+		objects.push_back(object);
+		return object;
+	}
+
+	std::vector<uint8_t> PublishUpdate()
+	{
+		std::vector<uint8_t> bytes;
+		arith::Encoder encoder(bytes);
+
+		// Encode classes of newly created objects
+		newObjectCountDist.EncodeAndTally(encoder, objects.size() - prevObjects.size());
+		for (size_t i = prevObjects.size(); i < objects.size(); ++i)
+		{
+			EncodeUniform(encoder, GetIndex(classes, objects[i]->objectClass), classes.size());
+		}
+		prevObjects = objects;
+
+		// Encode updates for each view
+		for (auto object : objects)
+		{
+			for (int i = 0; i < object->objectClass->numIntFields; ++i)
+			{
+				dist.EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i]);
+			}
+			object->prevIntFields = object->intFields;
+		}
+
+		encoder.Finish();
+		return bytes;
+	}
 };
 
 struct VView_
@@ -36,7 +83,36 @@ struct VClient_
 	std::vector<VClass> classes;
 	std::vector<VView> views;
 	IntegerDistribution dist;
+	IntegerDistribution newObjectCountDist;
+
+	VClient_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses) {}
+
+	void ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
+	{
+		std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
+		arith::Decoder decoder(bytes);
+
+		// Decode classes of newly created objects, and instantiate corresponding views
+		int newObjects = newObjectCountDist.DecodeAndTally(decoder);
+		for (int i = 0; i < newObjects; ++i)
+		{
+			views.push_back(new VView_(classes[DecodeUniform(decoder, classes.size())]));
+		}
+
+		// Decode updates for each view
+		for (auto view : views)
+		{
+			for (int i = 0; i < view->objectClass->numIntFields; ++i)
+			{
+				view->intFields[i] += dist.DecodeAndTally(decoder);
+			}
+		}
+	}
 };
+
+////////////////////////
+// API implementation //
+////////////////////////
 
 VClass vCreateClass(int numIntFields)
 {
@@ -45,21 +121,12 @@ VClass vCreateClass(int numIntFields)
 
 VServer vCreateServer(const VClass * classes, int numClasses)
 {
-	auto server = new VServer_;
-	server->classes.assign(classes, classes + numClasses);
-	return server;
+	return new VServer_(classes, numClasses);
 }
 
 VObject vCreateObject(VServer server, VClass objectClass)
 {
-	// Validate that this is a class the server knows about
-	auto it = std::find(begin(server->classes), end(server->classes), objectClass);
-	if (it == end(server->classes)) return nullptr;
-
-	// Instantiate the object
-	auto object = new VObject_(objectClass);
-	server->objects.push_back(object);
-	return object;
+	return server->CreateObject(objectClass);
 }
 
 void vSetObjectInt(VObject object, int index, int value)
@@ -69,55 +136,37 @@ void vSetObjectInt(VObject object, int index, int value)
 
 int vPublishUpdate(VServer server, void * buffer, int bufferSize)
 {
-	std::vector<uint8_t> bytes;
-	arith::Encoder encoder(bytes);
-	for (auto object : server->objects)
-	{
-		for (int i = 0; i < object->objectClass->numIntFields; ++i)
-		{
-			server->dist.EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i]);
-		}
-		object->prevIntFields = object->intFields;
-	}
-	encoder.Finish();
-
+	auto bytes = server->PublishUpdate();
 	memcpy(buffer, bytes.data(), std::min(bytes.size(), size_t(bufferSize)));
 	return bytes.size();
 }
 
 VClient vCreateClient(const VClass * classes, int numClasses)
 {
-	auto server = new VClient_;
-	server->classes.assign(classes, classes + numClasses);
-	return server;
-}
-
-VView vCreateView(VClient client, VClass viewClass)
-{
-	// Validate that this is a class the client knows about
-	auto it = std::find(begin(client->classes), end(client->classes), viewClass);
-	if (it == end(client->classes)) return nullptr;
-
-	// Instantiate the object
-	auto view = new VView_(viewClass);
-	client->views.push_back(view);
-	return view;
+	return new VClient_(classes, numClasses);
 }
 
 void vConsumeUpdate(VClient client, const void * buffer, int bufferSize)
 {
-	std::vector<uint8_t> bytes(reinterpret_cast<const uint8_t *>(buffer), reinterpret_cast<const uint8_t *>(buffer) +bufferSize);
-	arith::Decoder decoder(bytes);
-	for (auto view : client->views)
-	{
-		for (int i = 0; i < view->objectClass->numIntFields; ++i)
-		{
-			view->intFields[i] += client->dist.DecodeAndTally(decoder);
-		}
-	}
+	client->ConsumeUpdate(reinterpret_cast<const uint8_t *>(buffer), bufferSize);
 }
 
-int vGetViewInt(VView object, int index)
+int vGetViewCount(VClient client)
 {
-	return object->intFields[index];
+	return client->views.size();
+}
+
+VView vGetView(VClient client, int index)
+{
+	return client->views[index];
+}
+
+VClass vGetViewClass(VView view)
+{
+	return view->objectClass;
+}
+
+int vGetViewInt(VView view, int index)
+{
+	return view->intFields[index];
 }

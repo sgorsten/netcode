@@ -1,5 +1,17 @@
 #include "Distribution.h"
 
+void EncodeUniform(arith::Encoder & encoder, arith::code_t x, arith::code_t d)
+{
+	encoder.Encode(x, x + 1, d);
+}
+
+arith::code_t DecodeUniform(arith::Decoder & decoder, arith::code_t d)
+{
+	auto x = decoder.Decode(d);
+	decoder.Confirm(x, x + 1);
+	return x;
+}
+
 static int CountSignificantBits(int value)
 {
 	int sign = value < 0 ? -1 : 0;
@@ -24,8 +36,7 @@ void IntegerDistribution::EncodeAndTally(arith::Encoder & encoder, int value)
 
 	++counts[bits];
 
-	arith::code_t mask = -1U >> (32 - bits);
-	encoder.Encode(value & mask, (value & mask) + 1, mask + 1);
+	EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
 }
 
 int IntegerDistribution::DecodeAndTally(arith::Decoder & decoder)
@@ -50,7 +61,5 @@ int IntegerDistribution::DecodeAndTally(arith::Decoder & decoder)
 
 	++counts[bits];
 
-	int val = decoder.Decode(1 << bits);
-	decoder.Confirm(val, val + 1);
-	return (val << (32 - bits)) >> (32 - bits);
+	return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
 }

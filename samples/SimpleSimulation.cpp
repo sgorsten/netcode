@@ -60,14 +60,13 @@ public:
 
 class Client
 {
+	VClass objectClass;
 	VClient client;
-	VView views[NUM_OBJECTS];
 public:
 	Client()
 	{
-		auto cl = vCreateClass(2);
-		client = vCreateClient(&cl, 1);
-		for (auto & view : views) view = vCreateView(client, cl);
+		objectClass = vCreateClass(2);
+		client = vCreateClient(&objectClass, 1);
 	}
 
 	void Draw() const
@@ -75,17 +74,21 @@ public:
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
-		for (auto view : views)
+		for (int i = 0, n = vGetViewCount(client); i < n; ++i)
 		{
-			float x = vGetViewInt(view, 0)*0.1f;
-			float y = vGetViewInt(view, 1)*0.1f;
-			glBegin(GL_TRIANGLE_FAN);
-			for (int i = 0; i < 12; ++i)
+			auto view = vGetView(client, i);
+			if (vGetViewClass(view) == objectClass)
 			{
-				float a = i*6.28f / 12;
-				glVertex2f(x + cos(a)*10, y + sin(a)*10);
+				float x = vGetViewInt(view, 0)*0.1f;
+				float y = vGetViewInt(view, 1)*0.1f;
+				glBegin(GL_TRIANGLE_FAN);
+				for (int i = 0; i < 12; ++i)
+				{
+					float a = i*6.28f / 12;
+					glVertex2f(x + cos(a) * 10, y + sin(a) * 10);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
 		glPopMatrix();
 	}
