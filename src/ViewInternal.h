@@ -32,7 +32,6 @@ struct VObject_
 	VObject_(VServer server, const Class & cl, int stateOffset);
 
     void SetIntField(int index, int value);
-    int GetIntField(int frame, int offset) const;
 };
 
 struct VServer_
@@ -49,6 +48,12 @@ struct VServer_
 
 	VServer_(const VClass * classes, size_t numClasses);
 
+    const uint8_t * GetFrameState(int frame) const
+    {
+        auto it = frameState.find(frame);
+        return it != end(frameState) ? it->second.data() : nullptr;
+    }
+
     VPeer CreatePeer();
 	VObject CreateObject(VClass objectClass);
     void PublishFrame();
@@ -59,8 +64,7 @@ struct VPeer_
     struct ObjectRecord
     {
         const VObject_ * object; int frameAdded, frameRemoved; 
-        bool isLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
-        int GetIntField(int frame, int offset) const { return isLive(frame) ? object->GetIntField(frame, offset) : 0; }
+        bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
     VServer server;

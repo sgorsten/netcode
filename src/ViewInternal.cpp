@@ -17,12 +17,6 @@ void VObject_::SetIntField(int index, int value)
     reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
 }
 
-int VObject_::GetIntField(int frame, int offset) const
-{
-    auto it = server->frameState.find(frame);
-    return it == end(server->frameState) ? 0 : reinterpret_cast<const int &>(it->second[stateOffset + offset]);
-}
-
 VServer_::VServer_(const VClass * classes, size_t numClasses) : numIntDistributions(), frame()
 {
     for(size_t i=0; i<numClasses; ++i)
@@ -83,7 +77,7 @@ void VPeer_::OnPublishFrame(int frame)
 {
     for(auto change : visChanges)
     {
-        auto it = std::find_if(begin(records), end(records), [=](ObjectRecord & r) { return r.object == change.first && r.isLive(frame); });
+        auto it = std::find_if(begin(records), end(records), [=](ObjectRecord & r) { return r.object == change.first && r.IsLive(frame); });
         if((it != end(records)) == change.second) continue; // If object visibility is as desired, skip this change
         if(change.second) records.push_back({change.first, frame, INT_MAX}); // Make object visible
         else it->frameRemoved = frame; // Make object invisible
@@ -110,12 +104,12 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
     int index = 0;
     for(const auto & record : records)
     {
-        if(record.isLive(prevFrame))
+        if(record.IsLive(prevFrame))
         {
-            if(!record.isLive(frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
+            if(!record.IsLive(frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
             ++index;                                                    // Either way, object was live, so it used an index
         }
-        else if(record.isLive(frame)) // If object was added between last frame and now
+        else if(record.IsLive(frame)) // If object was added between last frame and now
         {
             newObjects.push_back(record.object);
         }
@@ -128,17 +122,22 @@ std::vector<uint8_t> VPeer_::PublishUpdate()
 	newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
 	for (auto object : newObjects) EncodeUniform(encoder, object->cl.index, server->classes.size());
 
+    auto state = server->GetFrameState(frame);
+    auto prevState = server->GetFrameState(frame-1);
+    auto prevPrevState = server->GetFrameState(frame-2);
+
 	// Encode updates for each view
     for(const auto & record : records)
 	{
-        if(!record.isLive(frame)) continue;
+        if(!record.IsLive(frame)) continue;
         auto object = record.object;
 
         for(auto & field : object->cl.fields)
 		{
-            int value = record.GetIntField(frame, field.offset);
-            int prevValue = record.GetIntField(frame-1, field.offset);
-            int prevPrevValue = record.GetIntField(frame-2, field.offset);
+            int offset = object->stateOffset + field.offset;
+            int value = reinterpret_cast<const int &>(state[offset]);
+            int prevValue = record.IsLive(frame-1) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
+            int prevPrevValue = record.IsLive(frame-2) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
 			intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
 		}
 	}
