@@ -12,9 +12,15 @@
     <ClInclude Include="..\include\ArithCode.h">
       <Filter>include</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Distribution.h">
+      <Filter>include</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Distribution.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

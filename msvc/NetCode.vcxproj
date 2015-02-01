@@ -20,9 +20,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\ArithCode.h" />
+    <ClInclude Include="..\include\Distribution.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp" />
+    <ClCompile Include="..\src\Distribution.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}</ProjectGuid>
