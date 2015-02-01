@@ -25,10 +25,15 @@ struct VServer_
 {
 	std::vector<VClass> classes;
 	std::vector<VObject> objects, prevObjects;
-	IntegerDistribution dist;
+	std::vector<IntegerDistribution> intFieldDists;
 	IntegerDistribution newObjectCountDist;
 
-	VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses) {}
+	VServer_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses)
+	{
+		int numIntFields = 0;
+		for (auto cl : this->classes) numIntFields += cl->numIntFields;
+		intFieldDists.resize(numIntFields);
+	}
 
 	VObject CreateObject(VClass objectClass)
 	{
@@ -58,9 +63,15 @@ struct VServer_
 		// Encode updates for each view
 		for (auto object : objects)
 		{
+			int firstIndex = 0;
+			for (auto cl : classes)
+			{
+				if (cl == object->objectClass) break;
+				firstIndex += cl->numIntFields;
+			}
 			for (int i = 0; i < object->objectClass->numIntFields; ++i)
 			{
-				dist.EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i]);
+				intFieldDists[firstIndex+i].EncodeAndTally(encoder, object->intFields[i] - object->prevIntFields[i]);
 			}
 			object->prevIntFields = object->intFields;
 		}
@@ -82,10 +93,15 @@ struct VClient_
 {
 	std::vector<VClass> classes;
 	std::vector<VView> views;
-	IntegerDistribution dist;
+	std::vector<IntegerDistribution> intFieldDists;
 	IntegerDistribution newObjectCountDist;
 
-	VClient_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses) {}
+	VClient_(const VClass * classes, size_t numClasses) : classes(classes, classes + numClasses)
+	{
+		int numIntFields = 0;
+		for (auto cl : this->classes) numIntFields += cl->numIntFields;
+		intFieldDists.resize(numIntFields);
+	}
 
 	void ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	{
@@ -102,9 +118,15 @@ struct VClient_
 		// Decode updates for each view
 		for (auto view : views)
 		{
+			int firstIndex = 0;
+			for (auto cl : classes)
+			{
+				if (cl == view->objectClass) break;
+				firstIndex += cl->numIntFields;
+			}
 			for (int i = 0; i < view->objectClass->numIntFields; ++i)
 			{
-				view->intFields[i] += dist.DecodeAndTally(decoder);
+				view->intFields[i] += intFieldDists[firstIndex + i].DecodeAndTally(decoder);
 			}
 		}
 	}
