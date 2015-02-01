@@ -26,7 +26,7 @@ public:
 			object.py = std::uniform_real_distribution<float>(50, 670)(engine);
 			object.vx = std::uniform_real_distribution<float>(-100, +100)(engine);
 			object.vy = std::uniform_real_distribution<float>(-100, +100)(engine);
-			object.vobj = vCreateServerObject(server, cl);
+			object.vobj = vCreateObject(server, cl);
 		}
 	}
 
@@ -47,8 +47,8 @@ public:
 	{
 		for (auto & object : objects)
 		{
-			const int fields[] = { static_cast<int>(object.px * 10), static_cast<int>(object.py * 10) };
-			vSetObjectState(object.vobj, fields);
+			vSetObjectInt(object.vobj, 0, object.px * 10);
+			vSetObjectInt(object.vobj, 1, object.py * 10);
 		}
 
 		uint8_t buffer[2048];
@@ -61,13 +61,13 @@ public:
 class Client
 {
 	VClient client;
-	VObject objects[NUM_OBJECTS];
+	VView views[NUM_OBJECTS];
 public:
 	Client()
 	{
 		auto cl = vCreateClass(2);
 		client = vCreateClient(&cl, 1);
-		for (auto & object : objects) object = vCreateClientObject(client, cl);
+		for (auto & view : views) view = vCreateView(client, cl);
 	}
 
 	void Draw() const
@@ -75,15 +75,15 @@ public:
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
-		for (auto object : objects)
+		for (auto view : views)
 		{
-			int pos[2];
-			vGetObjectState(object, pos);
+			float x = vGetViewInt(view, 0)*0.1f;
+			float y = vGetViewInt(view, 1)*0.1f;
 			glBegin(GL_TRIANGLE_FAN);
 			for (int i = 0; i < 12; ++i)
 			{
 				float a = i*6.28f / 12;
-				glVertex2f(pos[0]*0.1f + cos(a)*10, pos[1]*0.1f + sin(a)*10);
+				glVertex2f(x + cos(a)*10, y + sin(a)*10);
 			}
 			glEnd();
 		}

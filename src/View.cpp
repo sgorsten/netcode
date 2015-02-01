@@ -11,10 +11,9 @@ struct VClass_
 struct VObject_
 {
 	VClass objectClass;
-	bool isServerObject;
 	std::vector<int> intFields, prevIntFields;
 
-	VObject_(VClass cl, bool isServerObject) : objectClass(cl), isServerObject(isServerObject), intFields(cl->numIntFields, 0), prevIntFields(intFields) {}
+	VObject_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0), prevIntFields(intFields) {}
 };
 
 struct VServer_
@@ -24,10 +23,18 @@ struct VServer_
 	IntegerDistribution dist;
 };
 
+struct VView_
+{
+	VClass objectClass;
+	std::vector<int> intFields;
+
+	VView_(VClass cl) : objectClass(cl), intFields(cl->numIntFields, 0) {}
+};
+
 struct VClient_
 {
 	std::vector<VClass> classes;
-	std::vector<VObject> objects;
+	std::vector<VView> views;
 	IntegerDistribution dist;
 };
 
@@ -43,16 +50,21 @@ VServer vCreateServer(const VClass * classes, int numClasses)
 	return server;
 }
 
-VObject vCreateServerObject(VServer server, VClass objectClass)
+VObject vCreateObject(VServer server, VClass objectClass)
 {
 	// Validate that this is a class the server knows about
 	auto it = std::find(begin(server->classes), end(server->classes), objectClass);
 	if (it == end(server->classes)) return nullptr;
 
 	// Instantiate the object
-	auto object = new VObject_(objectClass, true);
+	auto object = new VObject_(objectClass);
 	server->objects.push_back(object);
 	return object;
+}
+
+void vSetObjectInt(VObject object, int index, int value)
+{
+	object->intFields[index] = value;
 }
 
 int vPublishUpdate(VServer server, void * buffer, int bufferSize)
@@ -80,40 +92,32 @@ VClient vCreateClient(const VClass * classes, int numClasses)
 	return server;
 }
 
-VObject vCreateClientObject(VClient client, VClass objectClass)
+VView vCreateView(VClient client, VClass viewClass)
 {
 	// Validate that this is a class the client knows about
-	auto it = std::find(begin(client->classes), end(client->classes), objectClass);
+	auto it = std::find(begin(client->classes), end(client->classes), viewClass);
 	if (it == end(client->classes)) return nullptr;
 
 	// Instantiate the object
-	auto object = new VObject_(objectClass, false);
-	client->objects.push_back(object);
-	return object;
+	auto view = new VView_(viewClass);
+	client->views.push_back(view);
+	return view;
 }
 
 void vConsumeUpdate(VClient client, const void * buffer, int bufferSize)
 {
 	std::vector<uint8_t> bytes(reinterpret_cast<const uint8_t *>(buffer), reinterpret_cast<const uint8_t *>(buffer) +bufferSize);
 	arith::Decoder decoder(bytes);
-	for (auto object : client->objects)
+	for (auto view : client->views)
 	{
-		for (int i = 0; i < object->objectClass->numIntFields; ++i)
+		for (int i = 0; i < view->objectClass->numIntFields; ++i)
 		{
-			object->prevIntFields[i] = object->intFields[i];
-			object->intFields[i] = object->prevIntFields[i] + client->dist.DecodeAndTally(decoder);
+			view->intFields[i] += client->dist.DecodeAndTally(decoder);
 		}
 	}
 }
 
-void vSetObjectState(VObject object, const int * intFields)
+int vGetViewInt(VView object, int index)
 {
-	if (!object->isServerObject) return; // Not permitted to modify client objects
-
-	object->intFields.assign(intFields, intFields + object->intFields.size());
-}
-
-void vGetObjectState(VObject object, int * intFields)
-{
-	std::copy(begin(object->intFields), end(object->intFields), intFields);
+	return object->intFields[index];
 }
