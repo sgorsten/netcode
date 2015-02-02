@@ -87,8 +87,9 @@ struct VServer_
 	std::vector<uint8_t> state;
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
+    int numFramesForTimeout;
 
-	VServer_(const VClass * classes, size_t numClasses);
+	VServer_(const VClass * classes, size_t numClasses, int numFramesForTimeout);
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -127,6 +128,7 @@ struct VPeer_
 
     VPeer_(VServer server);
 
+    bool IsTimedOut() const { return server->frame - (ackFrames.empty() ? 0 : ackFrames.front()) > server->numFramesForTimeout; } // TODO: Account for peers which have just been created.
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
     void SetVisibility(const VObject_ * object, bool setVisible);

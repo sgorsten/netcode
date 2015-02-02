@@ -15,13 +15,14 @@ void    vFreeBlob        (VBlob blob);
                          
 VClass  vCreateClass     (int numIntFields);
                          
-VServer vCreateServer    (const VClass * classes, int numClasses);
+VServer vCreateServer    (const VClass * classes, int numClasses, int numFramesForTimeout);
 VClient vCreateClient    (const VClass * classes, int numClasses);
                          
 VPeer   vCreatePeer      (VServer server);
 VObject vCreateObject    (VServer server, VClass objectClass);
 void    vPublishFrame    (VServer server);
                          
+int     vIsPeerTimedOut  (VPeer peer);
 void    vSetVisibility   (VPeer peer, VObject object, int isVisible);
 VBlob   vProduceUpdate   (VPeer peer);
 void    vConsumeResponse (VPeer peer, const void * data, int size);

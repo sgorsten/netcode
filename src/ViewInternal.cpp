@@ -39,7 +39,7 @@ void VObject_::SetIntField(int index, int value)
     reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
 }
 
-VServer_::VServer_(const VClass * classes, size_t numClasses) : policy(classes, numClasses), frame()
+VServer_::VServer_(const VClass * classes, size_t numClasses, int numFramesForTimeout) : policy(classes, numClasses), frame(), numFramesForTimeout(numFramesForTimeout)
 {
 
 }
@@ -74,6 +74,7 @@ void VServer_::PublishFrame()
     int oldestAck = INT_MAX;
     for(auto peer : peers)
     {
+        if(peer->IsTimedOut()) continue;
         peer->OnPublishFrame(frame);
         oldestAck = std::min(oldestAck, peer->GetOldestAckFrame());
     }

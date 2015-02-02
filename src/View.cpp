@@ -7,16 +7,17 @@ int vGetBlobSize(VBlob blob) { return blob->memory.size(); }
 void vFreeBlob(VBlob blob) { delete blob; }
 
 VClass vCreateClass(int numIntFields) { return new VClass_ { numIntFields }; }
-VServer vCreateServer(const VClass * classes, int numClasses) { return new VServer_(classes, numClasses); }
+VServer vCreateServer(const VClass * classes, int numClasses, int numFramesForTimeout) { return new VServer_(classes, numClasses, numFramesForTimeout); }
 VClient vCreateClient(const VClass * classes, int numClasses) {	return new VClient_(classes, numClasses); }
 
 VPeer vCreatePeer(VServer server) { return server->CreatePeer(); }
 VObject vCreateObject(VServer server, VClass objectClass) {	return server->CreateObject(objectClass); }
 void vPublishFrame(VServer server) { return server->PublishFrame(); }
 
-void vSetVisibility(VPeer peer, VObject object, int isVisible) { peer->SetVisibility(object, !!isVisible); }
-VBlob vProduceUpdate(VPeer peer) { return new VBlob_{peer->ProduceUpdate()}; }
-void vConsumeResponse(VPeer peer, const void * data, int size) { peer->ConsumeResponse(reinterpret_cast<const uint8_t *>(data), size); }
+int vIsPeerTimedOut(VPeer peer) { return peer->IsTimedOut() ? 1 : 0; }
+void vSetVisibility(VPeer peer, VObject object, int isVisible) { if(!peer->IsTimedOut()) peer->SetVisibility(object, !!isVisible); }
+VBlob vProduceUpdate(VPeer peer) { return peer->IsTimedOut() ? 0 : new VBlob_{peer->ProduceUpdate()}; }
+void vConsumeResponse(VPeer peer, const void * data, int size) { if(!peer->IsTimedOut()) peer->ConsumeResponse(reinterpret_cast<const uint8_t *>(data), size); }
 
 void vSetObjectInt(VObject object, int index, int value) { object->SetIntField(index, value); }
 void vDestroyObject(VObject object)
