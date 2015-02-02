@@ -105,6 +105,10 @@ struct Distribs
 {
     std::vector<IntegerDistribution> intFieldDists;
 	IntegerDistribution newObjectCountDist, delObjectCountDist;
+    SymbolDistribution classDist;
+
+    Distribs() {}
+    Distribs(const Policy & policy) : intFieldDists(policy.numIntFields), classDist(policy.classes.size()) {}
 };
 
 struct VPeer_

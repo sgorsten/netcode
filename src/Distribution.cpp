@@ -1,5 +1,7 @@
 #include "Distribution.h"
 
+#include <cassert>
+
 void EncodeUniform(arith::Encoder & encoder, arith::code_t x, arith::code_t d)
 {
 	encoder.Encode(x, x + 1, d);
@@ -12,6 +14,47 @@ arith::code_t DecodeUniform(arith::Decoder & decoder, arith::code_t d)
 	return x;
 }
 
+SymbolDistribution::SymbolDistribution(size_t symbols) : counts(symbols,1)
+{
+
+}
+
+void SymbolDistribution::EncodeAndTally(arith::Encoder & encoder, size_t symbol)
+{
+    assert(symbol < counts.size());
+
+    arith::code_t a = 0;
+	for (size_t i = 0; i < symbol; ++i) a += counts[i];
+	arith::code_t b = a + counts[symbol], d = b;
+	for (size_t i = symbol + 1; i < counts.size(); ++i) d += counts[i];
+	encoder.Encode(a, b, d);
+
+	++counts[symbol];
+}
+
+size_t SymbolDistribution::DecodeAndTally(arith::Decoder & decoder)
+{
+    arith::code_t d = 0;
+	for (int i = 0; i < counts.size(); ++i) d += counts[i];
+	arith::code_t x = decoder.Decode(d);
+
+	arith::code_t a = 0;
+	for (int i = 0; i < counts.size(); ++i)
+	{
+		arith::code_t b = a + counts[i];
+		if (b > x)
+		{
+			decoder.Confirm(a, b);
+			++counts[i];
+            return i;
+		}
+		a = b;
+	}
+
+	assert(false);
+    return 0;
+}
+
 static int CountSignificantBits(int value)
 {
 	int sign = value < 0 ? -1 : 0;
@@ -19,47 +62,20 @@ static int CountSignificantBits(int value)
 	return 32;
 }
 
-IntegerDistribution::IntegerDistribution()
+IntegerDistribution::IntegerDistribution() : dist(32)
 { 
-	for (int i = 0; i < 32; ++i) counts[i] = 1; 
+
 }
 
 void IntegerDistribution::EncodeAndTally(arith::Encoder & encoder, int value)
 {
 	int bits = CountSignificantBits(value);
-
-	arith::code_t a = 0;
-	for (int i = 0; i < bits; ++i) a += counts[i];
-	arith::code_t b = a + counts[bits], d = b;
-	for (int i = bits + 1; i < 32; ++i) d += counts[i];
-	encoder.Encode(a, b, d);
-
-	++counts[bits];
-
+    dist.EncodeAndTally(encoder, bits);
 	EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
 }
 
 int IntegerDistribution::DecodeAndTally(arith::Decoder & decoder)
 {
-	arith::code_t d = 0;
-	for (int i = 0; i < 32; ++i) d += counts[i];
-	arith::code_t x = decoder.Decode(d);
-
-	arith::code_t a = 0;
-	int bits = 0;
-	for (int i = 0; i < 32; ++i)
-	{
-		arith::code_t b = a + counts[i];
-		if (b > x)
-		{
-			decoder.Confirm(a, b);
-			bits = i;
-			break;
-		}
-		a = b;
-	}
-
-	++counts[bits];
-
+    int bits = dist.DecodeAndTally(decoder);
 	return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
 }

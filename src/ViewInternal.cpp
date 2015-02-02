@@ -124,7 +124,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 	arith::Encoder encoder(bytes);
     auto & distribs = frameDistribs[frame];
     if(prevFrame != 0) distribs = frameDistribs[prevFrame];
-    else distribs.intFieldDists.resize(server->policy.numIntFields);
+    else distribs = Distribs(server->policy);
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -148,7 +148,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 
 	// Encode classes of newly created objects
 	distribs.newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
-	for (auto object : newObjects) EncodeUniform(encoder, object->cl.index, server->policy.classes.size());
+	for (auto object : newObjects) distribs.classDist.EncodeAndTally(encoder, object->cl.index);
 
     auto state = server->GetFrameState(frame);
     auto prevState = server->GetFrameState(prevFrame);
@@ -215,6 +215,9 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     memcpy(&frame, buffer + 0, sizeof(int32_t));
     memcpy(&prevFrame, buffer + 4, sizeof(int32_t));
     memcpy(&prevPrevFrame, buffer + 8, sizeof(int32_t));
+
+    // Don't bother decoding messages for old frames (TODO: We may still want to decode these frames if they can improve our ack set)
+    if(!frames.empty() && frames.rbegin()->first >= frame) return;
     
     auto prevState = GetFrameState(prevFrame);
     auto prevPrevState = GetFrameState(prevPrevFrame);
@@ -234,7 +237,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
         distribs = frames[prevFrame].distribs;
         views = frames[prevFrame].views;
     }
-    else distribs.intFieldDists.resize(policy.numIntFields);
+    else distribs = Distribs(policy);
 
     // Decode indices of deleted objects
     int delObjects = distribs.delObjectCountDist.DecodeAndTally(decoder);
@@ -249,7 +252,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
-        auto & cl = policy.classes[DecodeUniform(decoder, policy.classes.size())];
+        auto & cl = policy.classes[distribs.classDist.DecodeAndTally(decoder)];
 		views.push_back(std::make_shared<VView_>(this, cl, stateAlloc.Allocate(cl.sizeBytes), frame));
 	}
 
