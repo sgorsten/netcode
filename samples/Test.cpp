@@ -1,5 +1,4 @@
-#include "ArithCode.h"
-#include "Distribution.h"
+#include "Util.h"
 
 #include <iostream>
 #include <random>

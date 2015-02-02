@@ -199,7 +199,7 @@ int main(int argc, char * argv []) try
 
 		auto buffer0 = server.ProduceUpdate(0);
         auto buffer1 = server.ProduceUpdate(1);
-        if(dist(engine) > 0.2f)
+        if(dist(engine) > 0.2f) // Client 0 has a crappy connection, and drops packets frequently
         {
 		    auto response0 = client0.Update(buffer0);
             if(dist(engine) > 0.2f) server.ConsumeResponse(0, response0);
@@ -207,7 +207,7 @@ int main(int argc, char * argv []) try
         if(dist(engine) > 0.2f)
         {
             auto response1 = client1.Update(buffer1);
-            //if(dist(engine) > 0.2f) server.ConsumeResponse(1, response1);
+            // Client 1 never responds, to prove that we can still transfer game state and our memory usage is bounded
         }
         
 		glClear(GL_COLOR_BUFFER_BIT);

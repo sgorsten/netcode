@@ -1,6 +1,6 @@
-#include "ViewInternal.h"
-
-#include <algorithm>
+#include "View.h"
+#include "Server.h"
+#include "Client.h"
 
 void * vGetBlobData(VBlob blob) { return blob->memory.data(); }
 int vGetBlobSize(VBlob blob) { return blob->memory.size(); }

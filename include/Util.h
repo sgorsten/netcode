@@ -27,5 +27,17 @@ public:
 	int DecodeAndTally(arith::Decoder & decoder);
 };
 
+class RangeAllocator
+{
+    size_t totalCapacity;
+    std::vector<std::pair<size_t,size_t>> freeList;
+public:
+    RangeAllocator();
+
+    size_t GetTotalCapacity() const { return totalCapacity; }
+
+    size_t Allocate(size_t amount);
+    void Free(size_t offset, size_t amount);
+};
 
 #endif

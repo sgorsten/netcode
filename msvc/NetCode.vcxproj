@@ -20,15 +20,20 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\ArithCode.h" />
-    <ClInclude Include="..\include\Distribution.h" />
+    <ClInclude Include="..\include\Util.h" />
     <ClInclude Include="..\include\View.h" />
-    <ClInclude Include="..\src\ViewInternal.h" />
+    <ClInclude Include="..\src\Client.h" />
+    <ClInclude Include="..\src\Common.h" />
+    <ClInclude Include="..\src\Policy.h" />
+    <ClInclude Include="..\src\Server.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp" />
-    <ClCompile Include="..\src\Distribution.cpp" />
+    <ClCompile Include="..\src\Client.cpp" />
+    <ClCompile Include="..\src\Util.cpp" />
+    <ClCompile Include="..\src\Policy.cpp" />
+    <ClCompile Include="..\src\Server.cpp" />
     <ClCompile Include="..\src\View.cpp" />
-    <ClCompile Include="..\src\ViewInternal.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}</ProjectGuid>

@@ -12,27 +12,42 @@
     <ClInclude Include="..\include\ArithCode.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Distribution.h">
-      <Filter>include</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\View.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\ViewInternal.h">
+    <ClInclude Include="..\src\Policy.h">
       <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\Server.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\Common.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\Client.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Util.h">
+      <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\ArithCode.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\Distribution.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\View.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\ViewInternal.cpp">
+    <ClCompile Include="..\src\Policy.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Server.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Client.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Util.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,4 +1,4 @@
-#include "Distribution.h"
+#include "Util.h"
 
 #include <cassert>
 
@@ -78,4 +78,31 @@ int IntegerDistribution::DecodeAndTally(arith::Decoder & decoder)
 {
     int bits = dist.DecodeAndTally(decoder);
 	return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
+}
+
+RangeAllocator::RangeAllocator() : totalCapacity()
+{
+
+}
+
+size_t RangeAllocator::Allocate(size_t amount)
+{
+    for(auto it = freeList.rbegin(); it != freeList.rend(); ++it)
+    {
+        if(it->second == amount)
+        {
+            auto offset = it->first;
+            freeList.erase(freeList.begin() + (&*it - freeList.data()));
+            return offset;
+        }
+    }
+
+    auto offset = totalCapacity;
+    totalCapacity += amount;
+    return offset;
+}
+
+void RangeAllocator::Free(size_t offset, size_t amount)
+{
+    freeList.push_back({offset,amount});
 }
