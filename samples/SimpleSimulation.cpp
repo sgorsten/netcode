@@ -1,4 +1,4 @@
-#include "View.h"
+#include <netcode.h>
 
 #include <cstdint>
 #include <vector>
@@ -8,20 +8,20 @@
 
 class Server
 {
-    struct PhysicsObject { float px, py, vx, vy; VObject vobj; };
+    struct PhysicsObject { float px, py, vx, vy; NCobject * vobj; };
 
-	VServer server;
-    VPeer peer1, peer2;
+	NCserver * server;
+    NCpeer * peer1, * peer2;
     std::vector<PhysicsObject> objects;
-	VObject bar;
+	NCobject * bar;
 	float bp, bv;
 public:
 	Server()
 	{
-		const VClass classes[] = {vCreateClass(2), vCreateClass(4)};
-		server = vCreateServer(classes, 2, 30);
-        peer1 = vCreatePeer(server);
-        peer2 = vCreatePeer(server);
+		NCclass * const classes[] = {ncCreateClass(2), ncCreateClass(4)};
+		server = ncCreateServer(classes, 2, 30);
+        peer1 = ncCreatePeer(server);
+        peer2 = ncCreatePeer(server);
 
 		std::mt19937 engine;
         objects.resize(50);
@@ -31,10 +31,10 @@ public:
 			object.py = std::uniform_real_distribution<float>(50, 670)(engine);
 			object.vx = std::uniform_real_distribution<float>(-100, +100)(engine);
 			object.vy = std::uniform_real_distribution<float>(-100, +100)(engine);
-			object.vobj = vCreateObject(server, classes[0]);
+			object.vobj = ncCreateObject(server, classes[0]);
 		}
-		bar = vCreateObject(server, classes[1]);
-        vSetVisibility(peer1, bar, 1);
+		bar = ncCreateObject(server, classes[1]);
+        ncSetVisibility(peer1, bar, 1);
 		bp = 100;
 		bv = -25;
 	}
@@ -52,10 +52,10 @@ public:
 			if (object.py < 20 && object.vy < 0) object.vy = -object.vy;
 			if (object.py > 700 && object.vy > 0) object.vy = -object.vy;
 
-			vSetObjectInt(object.vobj, 0, object.px * 10);
-			vSetObjectInt(object.vobj, 1, object.py * 10);
-            vSetVisibility(peer1, object.vobj, object.px < 800 && object.py < 500);
-            vSetVisibility(peer2, object.vobj, object.px > 480 && object.py > 220);
+			ncSetObjectInt(object.vobj, 0, object.px * 10);
+			ncSetObjectInt(object.vobj, 1, object.py * 10);
+            ncSetVisibility(peer1, object.vobj, object.px < 800 && object.py < 500);
+            ncSetVisibility(peer2, object.vobj, object.px > 480 && object.py > 220);
 		}
 
 		bp += bv * timestep;
@@ -70,15 +70,15 @@ public:
 			bv = -bv;
 		}
 
-		vSetObjectInt(bar, 0, bp);
-		vSetObjectInt(bar, 1, (100 - bp) * 255 / 100);
-		vSetObjectInt(bar, 2, bp * 255 / 100);
-		vSetObjectInt(bar, 3, 32);
+		ncSetObjectInt(bar, 0, bp);
+		ncSetObjectInt(bar, 1, (100 - bp) * 255 / 100);
+		ncSetObjectInt(bar, 2, bp * 255 / 100);
+		ncSetObjectInt(bar, 3, 32);
 
-        vPublishFrame(server);
+        ncPublishFrame(server);
 	}
 
-    size_t GetMemUsage() const { return vDebugServerMemoryUsage(server); }
+    size_t GetMemUsage() const { return ncDebugServerMemoryUsage(server); }
 
     void Draw() const
     {
@@ -98,43 +98,43 @@ public:
 
 	std::vector<uint8_t> ProduceUpdate(int peer)
 	{
-        auto blob = vProduceUpdate(peer ? peer2 : peer1);
-        std::vector<uint8_t> buffer(vGetBlobSize(blob));
-        memcpy(buffer.data(), vGetBlobData(blob), buffer.size());
-        vFreeBlob(blob);
+        auto blob = ncProduceUpdate(peer ? peer2 : peer1);
+        std::vector<uint8_t> buffer(ncGetBlobSize(blob));
+        memcpy(buffer.data(), ncGetBlobData(blob), buffer.size());
+        ncFreeBlob(blob);
         return buffer;
 	}
 
     void ConsumeResponse(int peer, const std::vector<uint8_t> & buffer)
     {
-        vConsumeResponse(peer ? peer2 : peer1, buffer.data(), buffer.size());
+        ncConsumeResponse(peer ? peer2 : peer1, buffer.data(), buffer.size());
     }
 };
 
 class Client
 {
-	VClass objectClass, barClass;
-	VClient client;
+	NCclass * objectClass, * barClass;
+	NCclient * client;
 public:
 	Client()
 	{
-		objectClass = vCreateClass(2);
-		barClass = vCreateClass(4);
-		const VClass classes [] = { objectClass, barClass };
-		client = vCreateClient(classes, 2, 30);
+		objectClass = ncCreateClass(2);
+		barClass = ncCreateClass(4);
+		NCclass * classes[] = { objectClass, barClass };
+		client = ncCreateClient(classes, 2, 30);
 	}
 
-    size_t GetMemUsage() const { return vDebugClientMemoryUsage(client); }
+    size_t GetMemUsage() const { return ncDebugClientMemoryUsage(client); }
 
 	void Draw(float r, float g, float b) const
 	{
-		for (int i = 0, n = vGetViewCount(client); i < n; ++i)
+		for (int i = 0, n = ncGetViewCount(client); i < n; ++i)
 		{
-			auto view = vGetView(client, i);
-			if (vGetViewClass(view) == objectClass)
+			auto view = ncGetView(client, i);
+			if (ncGetViewClass(view) == objectClass)
 			{
-				float x = vGetViewInt(view, 0)*0.1f;
-				float y = vGetViewInt(view, 1)*0.1f;
+				float x = ncGetViewInt(view, 0)*0.1f;
+				float y = ncGetViewInt(view, 1)*0.1f;
 				glBegin(GL_TRIANGLE_FAN);
 				glColor3f(r, g, b);
 				for (int i = 0; i < 12; ++i)
@@ -144,12 +144,12 @@ public:
 				}
 				glEnd();
 			}
-			if (vGetViewClass(view) == barClass)
+			if (ncGetViewClass(view) == barClass)
 			{
-				int p = vGetViewInt(view, 0);
-				int r = vGetViewInt(view, 1);
-				int g = vGetViewInt(view, 2);
-				int b = vGetViewInt(view, 3);
+				int p = ncGetViewInt(view, 0);
+				int r = ncGetViewInt(view, 1);
+				int g = ncGetViewInt(view, 2);
+				int b = ncGetViewInt(view, 3);
 				glBegin(GL_QUADS);
 				glColor3ub(r, g, b);
 				glVertex2i(10, 10);
@@ -163,12 +163,12 @@ public:
 
 	std::vector<uint8_t> Update(const std::vector<uint8_t> & buffer)
 	{
-		vConsumeUpdate(client, buffer.data(), buffer.size());
+		ncConsumeUpdate(client, buffer.data(), buffer.size());
 
-        auto blob = vProduceResponse(client);
-        std::vector<uint8_t> response(vGetBlobSize(blob));
-        memcpy(response.data(), vGetBlobData(blob), response.size());
-        vFreeBlob(blob);
+        auto blob = ncProduceResponse(client);
+        std::vector<uint8_t> response(ncGetBlobSize(blob));
+        memcpy(response.data(), ncGetBlobData(blob), response.size());
+        ncFreeBlob(blob);
         return response;
 	}
 };

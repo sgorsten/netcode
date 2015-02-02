@@ -1,34 +1,34 @@
 #include "Server.h"
 
-VObject_::VObject_(VServer_ * server, const Policy::Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
+NCobject::NCobject(NCserver * server, const Policy::Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
 }
 
-void VObject_::SetIntField(int index, int value)
+void NCobject::SetIntField(int index, int value)
 { 
     reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
 }
 
-VServer_::VServer_(VClass_ * const * classes, size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta), frame()
+NCserver::NCserver(NCclass * const * classes, size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta), frame()
 {
 
 }
 
-VPeer_ * VServer_::CreatePeer()
+NCpeer * NCserver::CreatePeer()
 {
-	auto peer = new VPeer_(this);
+	auto peer = new NCpeer(this);
 	peers.push_back(peer);
 	return peer;    
 }
 
-VObject_ * VServer_::CreateObject(VClass_ * objectClass)
+NCobject * NCserver::CreateObject(NCclass * objectClass)
 {
     for(auto & cl : policy.classes)
     {
         if(cl.cl == objectClass)
         {
-	        auto object = new VObject_(this, cl, stateAlloc.Allocate(cl.sizeBytes));
+	        auto object = new NCobject(this, cl, stateAlloc.Allocate(cl.sizeBytes));
             if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
 	        objects.push_back(object);
 	        return object;
@@ -37,7 +37,7 @@ VObject_ * VServer_::CreateObject(VClass_ * objectClass)
     return nullptr;
 }
 
-void VServer_::PublishFrame()
+void NCserver::PublishFrame()
 {
     ++frame;
     frameState[frame] = state;
@@ -54,12 +54,12 @@ void VServer_::PublishFrame()
     frameState.erase(begin(frameState), frameState.lower_bound(frame - policy.maxFrameDelta));
 }
 
-VPeer_::VPeer_(VServer_ * server) : server(server), nextId(1)
+NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
 {
 
 }
 
-void VPeer_::OnPublishFrame(int frame)
+void NCpeer::OnPublishFrame(int frame)
 {
     for(auto change : visChanges)
     {
@@ -76,12 +76,12 @@ void VPeer_::OnPublishFrame(int frame)
     frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(server->frame - server->policy.maxFrameDelta));
 }
 
-void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
+void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 {
     visChanges.push_back({object,setVisible});
 }
 
-std::vector<uint8_t> VPeer_::ProduceUpdate()
+std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
     int32_t frame = server->frame;
     int32_t prevFrame = ackFrames.size() >= 1 ? ackFrames[ackFrames.size()-1] : 0;
@@ -155,7 +155,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 	return bytes;
 }
 
-void VPeer_::ConsumeResponse(const uint8_t * data, size_t size) 
+void NCpeer::ConsumeResponse(const uint8_t * data, size_t size) 
 {
     std::vector<int> newAck;
     while(size >= 4)

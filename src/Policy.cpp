@@ -1,6 +1,6 @@
 #include "Policy.h"
 
-Policy::Policy(VClass_ * const classes[], size_t numClasses, int maxFrameDelta) : numIntFields(), maxFrameDelta(maxFrameDelta)
+Policy::Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta) : numIntFields(), maxFrameDelta(maxFrameDelta)
 {
     for(size_t i=0; i<numClasses; ++i)
     {

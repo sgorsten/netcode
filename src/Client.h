@@ -3,25 +3,28 @@
 
 #include "Policy.h"
 
-struct VView_;
+#include <memory>
+#include <map>
+
+struct NCview;
 
 struct ClientFrame
 {
-    std::vector<std::shared_ptr<VView_>> views;
+    std::vector<std::shared_ptr<NCview>> views;
     std::vector<uint8_t> state;
     Distribs distribs;
 };
 
-struct VClient_
+struct NCclient
 {
     Policy policy;
     RangeAllocator stateAlloc;
     std::map<int, ClientFrame> frames;
-    std::map<int, std::weak_ptr<VView_>> id2View;
+    std::map<int, std::weak_ptr<NCview>> id2View;
 
-	VClient_(VClass_ * const classes[], size_t numClasses, int maxFrameDelta);
+	NCclient(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
 
-    std::shared_ptr<VView_> CreateView(size_t classIndex, int uniqueId, int frameAdded);
+    std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded);
 
     const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
     const uint8_t * GetFrameState(int frame) const
@@ -34,14 +37,14 @@ struct VClient_
     std::vector<uint8_t> ProduceResponse();
 };
 
-struct VView_
+struct NCview
 {
-    VClient_ * client;
+    NCclient * client;
     const Policy::Class & cl;
     int frameAdded, stateOffset;
 
-	VView_(VClient_ * client, const Policy::Class & cl, int stateOffset, int frameAdded);
-    ~VView_();
+	NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded);
+    ~NCview();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
     int GetIntField(int index) const;

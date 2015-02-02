@@ -1,15 +1,14 @@
 #ifndef POLICY_H
 #define POLICY_H
 
-#include "Common.h"
 #include "Util.h"
 
-struct VBlob_
+struct NCblob
 {
     std::vector<uint8_t> memory;
 };
 
-struct VClass_
+struct NCclass
 {
 	int numIntFields;
 };
@@ -20,7 +19,7 @@ struct Policy
 
     struct Class
     {
-        VClass_ * cl;
+        NCclass * cl;
         int index, sizeBytes;
         std::vector<Field> fields;
     };
@@ -29,7 +28,7 @@ struct Policy
     size_t numIntFields;
     int maxFrameDelta;
 
-    Policy(VClass_ * const classes[], size_t numClasses, int maxFrameDelta);
+    Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
 };
 
 struct Distribs

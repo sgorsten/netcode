@@ -1,26 +1,28 @@
 #include "Client.h"
 
-VView_::VView_(VClient_ * client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
+#include <cassert>
+
+NCview::NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
 }
 
-VView_::~VView_()
+NCview::~NCview()
 {
     client->stateAlloc.Free(stateOffset, cl.sizeBytes);
 }
 
-int VView_::GetIntField(int index) const
+int NCview::GetIntField(int index) const
 { 
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
 }
 
-VClient_::VClient_(VClass_ * const classes[], size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta)
+NCclient::NCclient(NCclass * const classes[], size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta)
 {
 
 }
 
-std::shared_ptr<VView_> VClient_::CreateView(size_t classIndex, int uniqueId, int frameAdded)
+std::shared_ptr<NCview> NCclient::CreateView(size_t classIndex, int uniqueId, int frameAdded)
 {
     auto it = id2View.find(uniqueId);
     if(it != end(id2View))
@@ -33,12 +35,12 @@ std::shared_ptr<VView_> VClient_::CreateView(size_t classIndex, int uniqueId, in
     }
 
     auto & cl = policy.classes[classIndex];
-    auto ptr = std::make_shared<VView_>(this, cl, (int)stateAlloc.Allocate(cl.sizeBytes), frameAdded);
+    auto ptr = std::make_shared<NCview>(this, cl, (int)stateAlloc.Allocate(cl.sizeBytes), frameAdded);
     id2View[uniqueId] = ptr;
     return ptr;
 }
 
-void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
+void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
     if(bufferSize < 4) return;
     int32_t frame, prevFrame, prevPrevFrame;
@@ -76,7 +78,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
         int index = DecodeUniform(decoder, views.size());
         views[index].reset();
     }
-    EraseIf(views, [](const std::shared_ptr<VView_> & v) { return !v; });
+    EraseIf(views, [](const std::shared_ptr<NCview> & v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
 	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
@@ -112,7 +114,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     }
 }
 
-std::vector<uint8_t> VClient_::ProduceResponse()
+std::vector<uint8_t> NCclient::ProduceResponse()
 {
     std::vector<uint8_t> buffer;
     for(auto it = frames.rbegin(); it != frames.rend(); ++it)

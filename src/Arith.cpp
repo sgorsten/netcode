@@ -1,4 +1,4 @@
-#include "ArithCode.h"
+#include "Arith.h"
 
 #include <cassert>
 

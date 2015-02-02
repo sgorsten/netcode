@@ -18,18 +18,10 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\samples\Test.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="NetCode.vcxproj">
-      <Project>{969acb9a-2b1d-4bde-9327-9c1fef29bd24}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}</ProjectGuid>
+    <ProjectGuid>{633B0956-1D5A-472F-B507-2276FA597966}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>Test</RootNamespace>
+    <RootNamespace>SimpleGame</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -74,19 +66,19 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros">
-    <NuGetPackageImportStamp>1c4e3173</NuGetPackageImportStamp>
+    <NuGetPackageImportStamp>6e94d11f</NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)..\bin\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)..\obj\$(ProjectName)\$(Configuration)-$(Platform)\</IntDir>
-    <TargetName>$(ProjectName)_d</TargetName>
+    <TargetName>$(ProjectName)-d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)..\bin\$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)..\obj\$(ProjectName)\$(Configuration)-$(Platform)\</IntDir>
-    <TargetName>$(ProjectName)_d</TargetName>
+    <TargetName>$(ProjectName)-d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -110,6 +102,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -124,6 +117,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -142,6 +136,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -160,9 +155,30 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\samples\simple_game.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NetCode.vcxproj">
+      <Project>{969acb9a-2b1d-4bde-9327-9c1fef29bd24}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\packages\glfw.redist.3.0.4.3\build\native\glfw.redist.targets" Condition="Exists('..\packages\glfw.redist.3.0.4.3\build\native\glfw.redist.targets')" />
+    <Import Project="..\packages\glfw.3.0.4.3\build\native\glfw.targets" Condition="Exists('..\packages\glfw.3.0.4.3\build\native\glfw.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\glfw.redist.3.0.4.3\build\native\glfw.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\glfw.redist.3.0.4.3\build\native\glfw.redist.targets'))" />
+    <Error Condition="!Exists('..\packages\glfw.3.0.4.3\build\native\glfw.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\glfw.3.0.4.3\build\native\glfw.targets'))" />
+  </Target>
 </Project>
