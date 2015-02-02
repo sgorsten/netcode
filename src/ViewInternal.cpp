@@ -100,6 +100,7 @@ void VPeer_::OnPublishFrame(int frame)
 
     int oldestAck = GetOldestAckFrame();
     EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck; });
+    frameDistribs.erase(begin(frameDistribs), frameDistribs.find(oldestAck));
 }
 
 void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)

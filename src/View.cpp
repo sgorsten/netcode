@@ -54,14 +54,16 @@ template<class K, class V> size_t MemUsage(const std::map<K,V> & map)
 static size_t MemUsage(uint8_t) { return 0; }
 static size_t MemUsage(int) { return 0; }
 static size_t MemUsage(const VPeer_::ObjectRecord & r) { return 0; }
+static size_t MemUsage(const IntegerDistribution & d) { return 0; }
+static size_t MemUsage(const Distribs & d) { return MemUsage(d.intFieldDists); }
 static size_t MemUsage(const VClass_ * cl) { return sizeof(VClass_); }
 static size_t MemUsage(const Policy::Field & f) { return 0; }
 static size_t MemUsage(const Policy::Class & cl) { return MemUsage(cl.cl) + MemUsage(cl.fields); }
 static size_t MemUsage(const Policy & policy) { return MemUsage(policy.classes); }
 static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_); }
-static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }
+static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs); }
 static size_t MemUsage(const VView_ * peer) { return sizeof(VView_); }
-static size_t MemUsage(const ClientFrame & f) { return MemUsage(f.views) + MemUsage(f.state); }
+static size_t MemUsage(const ClientFrame & f) { return MemUsage(f.views) + MemUsage(f.state) + MemUsage(f.distribs); }
 int vDebugServerMemoryUsage(VServer server)
 {
     return sizeof(VServer_) + MemUsage(server->policy) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
