@@ -183,6 +183,9 @@ int main(int argc, char * argv []) try
 	if (!win) throw std::runtime_error("glfwCreateWindow(...) failed.");
 	glfwMakeContextCurrent(win);
     
+    std::mt19937 engine;
+    std::uniform_real_distribution<float> dist;
+
 	double t0 = glfwGetTime();
 	while (!glfwWindowShouldClose(win))
 	{
@@ -196,10 +199,18 @@ int main(int argc, char * argv []) try
 
 		auto buffer0 = server.ProduceUpdate(0);
         auto buffer1 = server.ProduceUpdate(1);
-		auto response0 = client0.Update(buffer0);
-        auto response1 = client1.Update(buffer1);
-        server.ConsumeResponse(0, response0);
-        server.ConsumeResponse(1, response1);
+        if(dist(engine) > 0.2f)
+        {
+		    auto response0 = client0.Update(buffer0);
+            server.ConsumeResponse(0, response0);
+        }
+        else std::cout << "Drop 0" << std::endl;
+        if(dist(engine) > 0.2f)
+        {
+            auto response1 = client1.Update(buffer1);
+            server.ConsumeResponse(1, response1);
+        }
+        else std::cout << "Drop 1" << std::endl;
         
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();

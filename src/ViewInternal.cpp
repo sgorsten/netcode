@@ -78,7 +78,7 @@ void VServer_::PublishFrame()
 
 VPeer_::VPeer_(VServer server) : server(server)
 {
-    intFieldDists.resize(server->policy.numIntFields);
+
 }
 
 void VPeer_::OnPublishFrame(int frame)
@@ -112,7 +112,11 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
     memcpy(bytes.data() + 4, &prevFrame, sizeof(int32_t));
     memcpy(bytes.data() + 8, &prevPrevFrame, sizeof(int32_t));
 
-	arith::Encoder encoder(bytes);  
+    // Prepare arithmetic code for this frame
+	arith::Encoder encoder(bytes);
+    auto & distribs = frameDistribs[frame];
+    if(prevFrame != 0) distribs = frameDistribs[prevFrame];
+    else distribs.intFieldDists.resize(server->policy.numIntFields);
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -131,11 +135,11 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
         }
     }
     int numPrevObjects = index;
-    delObjectCountDist.EncodeAndTally(encoder, deletedIndices.size());
+    distribs.delObjectCountDist.EncodeAndTally(encoder, deletedIndices.size());
     for(auto index : deletedIndices) EncodeUniform(encoder, index, numPrevObjects);
 
 	// Encode classes of newly created objects
-	newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
+	distribs.newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
 	for (auto object : newObjects) EncodeUniform(encoder, object->cl.index, server->policy.classes.size());
 
     auto state = server->GetFrameState(frame);
@@ -154,7 +158,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
             int value = reinterpret_cast<const int &>(state[offset]);
             int prevValue = record.IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
             int prevPrevValue = record.IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-			intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
+			distribs.intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
 		}
 	}
 
@@ -186,7 +190,7 @@ int VView_::GetIntField(int index) const
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
 }
 
-VClient_::VClient_(const VClass * classes, size_t numClasses) : policy(classes, numClasses), intFieldDists(policy.numIntFields)
+VClient_::VClient_(const VClass * classes, size_t numClasses) : policy(classes, numClasses)
 {
 
 }
@@ -207,11 +211,15 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     // Server will never again refer to frames before this point
     if(prevPrevState != 0) frameState.erase(begin(frameState), frameState.find(prevPrevFrame));
 
+    // Prepare arithmetic code for this frame
 	std::vector<uint8_t> bytes(buffer + 12, buffer + bufferSize);
 	arith::Decoder decoder(bytes);
+    auto & distribs = frameDistribs[frame];
+    if(prevFrame != 0) distribs = frameDistribs[prevFrame];
+    else distribs.intFieldDists.resize(policy.numIntFields);
 
     // Decode indices of deleted objects
-    int delObjects = delObjectCountDist.DecodeAndTally(decoder);
+    int delObjects = distribs.delObjectCountDist.DecodeAndTally(decoder);
     for(int i=0; i<delObjects; ++i)
     {
         int index = DecodeUniform(decoder, views.size());
@@ -222,7 +230,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     EraseIf(views, [](VView v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
-	int newObjects = newObjectCountDist.DecodeAndTally(decoder);
+	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
         auto & cl = policy.classes[DecodeUniform(decoder, policy.classes.size())];
@@ -240,7 +248,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             int offset = view->stateOffset + field.offset;
             int prevValue = view->IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
             int prevPrevValue = view->IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = intFieldDists[field.distIndex].DecodeAndTally(decoder) + (prevValue * 2 - prevPrevValue);
+            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder) + (prevValue * 2 - prevPrevValue);
 		}
 	}
 }

@@ -100,6 +100,12 @@ struct VServer_
     void PublishFrame();
 };
 
+struct Distribs
+{
+    std::vector<IntegerDistribution> intFieldDists;
+	IntegerDistribution newObjectCountDist, delObjectCountDist;
+};
+
 struct VPeer_
 {
     struct ObjectRecord
@@ -109,11 +115,9 @@ struct VPeer_
     };
 
     VServer server;
-    std::vector<IntegerDistribution> intFieldDists;
-	IntegerDistribution newObjectCountDist, delObjectCountDist;
-
     std::vector<ObjectRecord> records;
     std::vector<std::pair<const VObject_ *,bool>> visChanges;
+    std::map<int, Distribs> frameDistribs;
     std::vector<int> ackFrames;
 
     VPeer_(VServer server);
@@ -140,11 +144,9 @@ struct VClient_
 {
     Policy policy;
     RangeAllocator stateAlloc;
-    std::vector<IntegerDistribution> intFieldDists;
-    IntegerDistribution newObjectCountDist, delObjectCountDist;
-
 	std::vector<VView> views;
     std::map<int, std::vector<uint8_t>> frameState;
+    std::map<int, Distribs> frameDistribs;
 
 	VClient_(const VClass * classes, size_t numClasses);
 
