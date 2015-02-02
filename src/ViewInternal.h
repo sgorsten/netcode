@@ -114,14 +114,14 @@ struct VPeer_
 
     std::vector<ObjectRecord> records;
     std::vector<std::pair<const VObject_ *,bool>> visChanges;
-    int prevFrame, frame;
+    std::vector<int> ackFrames;
 
     VPeer_(VServer server);
 
     void OnPublishFrame(int frame);
     void SetVisibility(const VObject_ * object, bool setVisible);
     std::vector<uint8_t> ProduceUpdate();
-    void ConsumeResponse(const uint8_t * data, size_t size) {}
+    void ConsumeResponse(const uint8_t * data, size_t size);
 };
 
 struct VView_
@@ -145,7 +145,6 @@ struct VClient_
 
 	std::vector<VView> views;
     std::map<int, std::vector<uint8_t>> frameState;
-    int frame;
 
 	VClient_(const VClass * classes, size_t numClasses);
 

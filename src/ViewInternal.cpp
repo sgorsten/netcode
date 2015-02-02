@@ -73,14 +73,12 @@ void VServer_::PublishFrame()
     for(auto peer : peers) peer->OnPublishFrame(frame);
 
     // Expire old frames
-    frameState.erase(frame-3);
+    //frameState.erase(frame-3);
 }
 
 VPeer_::VPeer_(VServer server) : server(server)
 {
     intFieldDists.resize(server->policy.numIntFields);
-    prevFrame = 0;
-    frame = 1;
 }
 
 void VPeer_::OnPublishFrame(int frame)
@@ -93,9 +91,8 @@ void VPeer_::OnPublishFrame(int frame)
         else it->frameRemoved = frame; // Make object invisible
     }
     visChanges.clear();
-    this->frame = frame;
 
-    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < frame-2; });
+    //EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < frame-2; });
 }
 
 void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
@@ -105,8 +102,17 @@ void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
 
 std::vector<uint8_t> VPeer_::ProduceUpdate()
 {
-	std::vector<uint8_t> bytes;
-	arith::Encoder encoder(bytes);
+    int32_t frame = server->frame;
+    int32_t prevFrame = ackFrames.size() >= 1 ? ackFrames[ackFrames.size()-1] : 0;
+    int32_t prevPrevFrame = ackFrames.size() >= 2 ? ackFrames[ackFrames.size()-2] : 0;
+
+    // Encode frameset in plain ints, for now
+	std::vector<uint8_t> bytes(12);
+    memcpy(bytes.data() + 0, &frame, sizeof(int32_t));
+    memcpy(bytes.data() + 4, &prevFrame, sizeof(int32_t));
+    memcpy(bytes.data() + 8, &prevPrevFrame, sizeof(int32_t));
+
+	arith::Encoder encoder(bytes);  
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -133,8 +139,8 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 	for (auto object : newObjects) EncodeUniform(encoder, object->cl.index, server->policy.classes.size());
 
     auto state = server->GetFrameState(frame);
-    auto prevState = server->GetFrameState(frame-1);
-    auto prevPrevState = server->GetFrameState(frame-2);
+    auto prevState = server->GetFrameState(prevFrame);
+    auto prevPrevState = server->GetFrameState(prevPrevFrame);
 
 	// Encode updates for each view
     for(const auto & record : records)
@@ -146,16 +152,28 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 		{
             int offset = object->stateOffset + field.offset;
             int value = reinterpret_cast<const int &>(state[offset]);
-            int prevValue = record.IsLive(frame-1) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
-            int prevPrevValue = record.IsLive(frame-2) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
+            int prevValue = record.IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
+            int prevPrevValue = record.IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
 			intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
 		}
 	}
 
-    prevFrame = frame;
-
 	encoder.Finish();
 	return bytes;
+}
+
+void VPeer_::ConsumeResponse(const uint8_t * data, size_t size) 
+{
+    std::vector<int> newAck;
+    while(size >= 4)
+    {
+        int32_t frame;
+        memcpy(&frame, data, sizeof(frame));
+        newAck.push_back(frame);
+        size -= 4;
+    }
+    if(newAck.empty()) return;
+    if(ackFrames.empty() || ackFrames.front() < newAck.front()) ackFrames = newAck;
 }
 
 VView_::VView_(VClient client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
@@ -168,17 +186,29 @@ int VView_::GetIntField(int index) const
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
 }
 
-VClient_::VClient_(const VClass * classes, size_t numClasses) : policy(classes, numClasses), intFieldDists(policy.numIntFields), frame()
+VClient_::VClient_(const VClass * classes, size_t numClasses) : policy(classes, numClasses), intFieldDists(policy.numIntFields)
 {
 
 }
 
 void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
-	std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
-	arith::Decoder decoder(bytes);
+    if(bufferSize < 12) return;
+    int32_t frame, prevFrame, prevPrevFrame;
+    memcpy(&frame, buffer + 0, sizeof(int32_t));
+    memcpy(&prevFrame, buffer + 4, sizeof(int32_t));
+    memcpy(&prevPrevFrame, buffer + 8, sizeof(int32_t));
+    
+    auto prevState = GetFrameState(prevFrame);
+    auto prevPrevState = GetFrameState(prevPrevFrame);
+    if(prevFrame != 0 && prevState == nullptr) return; // Malformed
+    if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
 
-    ++frame;
+    // Server will never again refer to frames before this point
+    if(prevPrevState != 0) frameState.erase(begin(frameState), frameState.find(prevPrevFrame));
+
+	std::vector<uint8_t> bytes(buffer + 12, buffer + bufferSize);
+	arith::Decoder decoder(bytes);
 
     // Decode indices of deleted objects
     int delObjects = delObjectCountDist.DecodeAndTally(decoder);
@@ -201,8 +231,6 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 
     auto & state = frameState[frame];
     state.resize(stateAlloc.GetTotalCapacity());
-    auto prevState = GetFrameState(frame-1);
-    auto prevPrevState = GetFrameState(frame-2);
 
 	// Decode updates for each view
 	for (auto view : views)
@@ -210,19 +238,22 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 		for (auto & field : view->cl.fields)
 		{
             int offset = view->stateOffset + field.offset;
-            int prevValue = view->IsLive(frame-1) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
-            int prevPrevValue = view->IsLive(frame-2) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
+            int prevValue = view->IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
+            int prevPrevValue = view->IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
             reinterpret_cast<int &>(state[offset]) = intFieldDists[field.distIndex].DecodeAndTally(decoder) + (prevValue * 2 - prevPrevValue);
 		}
 	}
-
-    frameState.erase(frame-3);
 }
 
 std::vector<uint8_t> VClient_::ProduceResponse()
-{ 
+{
     std::vector<uint8_t> buffer;
-    arith::Encoder encoder(buffer);
-    encoder.Finish();
+    for(auto it = frameState.rbegin(); it != frameState.rend(); ++it)
+    {
+        auto offset = buffer.size();
+        buffer.resize(offset + 4);
+        memcpy(buffer.data() + offset, &it->first, sizeof(int32_t));
+        if(buffer.size() == 8) break;
+    }
     return buffer;
 }

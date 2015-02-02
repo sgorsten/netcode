@@ -182,7 +182,7 @@ int main(int argc, char * argv []) try
 	auto win = glfwCreateWindow(1280, 720, "Simple Simulation", nullptr, nullptr);
 	if (!win) throw std::runtime_error("glfwCreateWindow(...) failed.");
 	glfwMakeContextCurrent(win);
-
+    
 	double t0 = glfwGetTime();
 	while (!glfwWindowShouldClose(win))
 	{
@@ -191,6 +191,7 @@ int main(int argc, char * argv []) try
 		const double t1 = glfwGetTime(), timestep = t1 - t0;
 		if (timestep < 1.0 / 60) continue;
 		t0 = t1;
+
 		server.Update(static_cast<float>(timestep));
 
 		auto buffer0 = server.ProduceUpdate(0);
@@ -199,7 +200,7 @@ int main(int argc, char * argv []) try
         auto response1 = client1.Update(buffer1);
         server.ConsumeResponse(0, response0);
         server.ConsumeResponse(1, response1);
-
+        
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
