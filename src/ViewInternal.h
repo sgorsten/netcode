@@ -62,8 +62,9 @@ struct Policy
 
     std::vector<Class> classes;
     size_t numIntFields;
+    int maxFrameDelta;
 
-    Policy(const VClass * classes, size_t numClasses);
+    Policy(const VClass * classes, size_t numClasses, int maxFrameDelta);
 };
 
 struct VObject_
@@ -87,9 +88,8 @@ struct VServer_
 	std::vector<uint8_t> state;
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
-    int numFramesForTimeout;
 
-	VServer_(const VClass * classes, size_t numClasses, int numFramesForTimeout);
+	VServer_(const VClass * classes, size_t numClasses, int maxFrameDelta);
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -105,7 +105,7 @@ struct VServer_
 struct Distribs
 {
     std::vector<IntegerDistribution> intFieldDists;
-	IntegerDistribution newObjectCountDist, delObjectCountDist;
+	IntegerDistribution newObjectCountDist, delObjectCountDist, uniqueIdDist;
     SymbolDistribution classDist;
 
     Distribs() {}
@@ -116,7 +116,7 @@ struct VPeer_
 {
     struct ObjectRecord
     {
-        const VObject_ * object; int frameAdded, frameRemoved; 
+        const VObject_ * object; int uniqueId, frameAdded, frameRemoved; 
         bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
@@ -125,10 +125,10 @@ struct VPeer_
     std::vector<std::pair<const VObject_ *,bool>> visChanges;
     std::map<int, Distribs> frameDistribs;
     std::vector<int> ackFrames;
+    int nextId;
 
     VPeer_(VServer server);
 
-    bool IsTimedOut() const { return server->frame - (ackFrames.empty() ? 0 : ackFrames.front()) > server->numFramesForTimeout; } // TODO: Account for peers which have just been created.
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
     void SetVisibility(const VObject_ * object, bool setVisible);
@@ -161,8 +161,11 @@ struct VClient_
     Policy policy;
     RangeAllocator stateAlloc;
     std::map<int, ClientFrame> frames;
+    std::map<int, std::weak_ptr<VView_>> id2View;
 
-	VClient_(const VClass * classes, size_t numClasses);
+	VClient_(const VClass * classes, size_t numClasses, int maxFrameDelta);
+
+    std::shared_ptr<VView_> CreateView(size_t classIndex, int uniqueId, int frameAdded);
 
     const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
     const uint8_t * GetFrameState(int frame) const

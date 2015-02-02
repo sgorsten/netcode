@@ -1,5 +1,6 @@
 #include "ViewInternal.h"
 
+#include <cassert>
 #include <algorithm>
 
 template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
@@ -7,12 +8,12 @@ template<class T> size_t GetIndex(const std::vector<T> & vec, T value)
 	return std::find(begin(vec), end(vec), value) - begin(vec);
 }
 
-template<class T, class F> void EraseIf(std::vector<T> & vec, F f)
+template<class T, class F> void EraseIf(T & container, F f)
 {
-    vec.erase(remove_if(begin(vec), end(vec), f), end(vec));
+    container.erase(remove_if(begin(container), end(container), f), end(container));
 }
 
-Policy::Policy(const VClass * classes, size_t numClasses) : numIntFields()
+Policy::Policy(const VClass * classes, size_t numClasses, int maxFrameDelta) : numIntFields(), maxFrameDelta(maxFrameDelta)
 {
     for(size_t i=0; i<numClasses; ++i)
     {
@@ -39,7 +40,7 @@ void VObject_::SetIntField(int index, int value)
     reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
 }
 
-VServer_::VServer_(const VClass * classes, size_t numClasses, int numFramesForTimeout) : policy(classes, numClasses), frame(), numFramesForTimeout(numFramesForTimeout)
+VServer_::VServer_(const VClass * classes, size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta), frame()
 {
 
 }
@@ -74,16 +75,16 @@ void VServer_::PublishFrame()
     int oldestAck = INT_MAX;
     for(auto peer : peers)
     {
-        if(peer->IsTimedOut()) continue;
         peer->OnPublishFrame(frame);
         oldestAck = std::min(oldestAck, peer->GetOldestAckFrame());
     }
 
     // Once all clients have acknowledged a certain frame, expire all older frames
     if(oldestAck != 0) frameState.erase(begin(frameState), frameState.find(oldestAck));
+    frameState.erase(begin(frameState), frameState.lower_bound(frame - policy.maxFrameDelta));
 }
 
-VPeer_::VPeer_(VServer server) : server(server)
+VPeer_::VPeer_(VServer server) : server(server), nextId(1)
 {
 
 }
@@ -94,14 +95,15 @@ void VPeer_::OnPublishFrame(int frame)
     {
         auto it = std::find_if(begin(records), end(records), [=](ObjectRecord & r) { return r.object == change.first && r.IsLive(frame); });
         if((it != end(records)) == change.second) continue; // If object visibility is as desired, skip this change
-        if(change.second) records.push_back({change.first, frame, INT_MAX}); // Make object visible
+        if(change.second) records.push_back({change.first, nextId++, frame, INT_MAX}); // Make object visible
         else it->frameRemoved = frame; // Make object invisible
     }
     visChanges.clear();
 
     int oldestAck = GetOldestAckFrame();
-    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck; });
+    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->policy.maxFrameDelta; });
     frameDistribs.erase(begin(frameDistribs), frameDistribs.find(oldestAck));
+    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(server->frame - server->policy.maxFrameDelta));
 }
 
 void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
@@ -114,6 +116,9 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
     int32_t frame = server->frame;
     int32_t prevFrame = ackFrames.size() >= 1 ? ackFrames[ackFrames.size()-1] : 0;
     int32_t prevPrevFrame = ackFrames.size() >= 2 ? ackFrames[ackFrames.size()-2] : 0;
+    int32_t cutoff = frame - server->policy.maxFrameDelta;
+    if(prevFrame < cutoff) prevFrame = 0;
+    if(prevPrevFrame < cutoff) prevPrevFrame = 0;    
 
     // Encode frameset in plain ints, for now
 	std::vector<uint8_t> bytes(12);
@@ -129,7 +134,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
-    std::vector<const VObject_ *> newObjects;
+    std::vector<const ObjectRecord *> newObjects;
     int index = 0;
     for(const auto & record : records)
     {
@@ -140,7 +145,7 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
         }
         else if(record.IsLive(frame)) // If object was added between last frame and now
         {
-            newObjects.push_back(record.object);
+            newObjects.push_back(&record);
         }
     }
     int numPrevObjects = index;
@@ -149,7 +154,11 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
 
 	// Encode classes of newly created objects
 	distribs.newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
-	for (auto object : newObjects) distribs.classDist.EncodeAndTally(encoder, object->cl.index);
+	for (auto record : newObjects)
+    {
+        distribs.classDist.EncodeAndTally(encoder, record->object->cl.index);
+        distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
+    }
 
     auto state = server->GetFrameState(frame);
     auto prevState = server->GetFrameState(prevFrame);
@@ -204,9 +213,27 @@ int VView_::GetIntField(int index) const
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
 }
 
-VClient_::VClient_(const VClass * classes, size_t numClasses) : policy(classes, numClasses)
+VClient_::VClient_(const VClass * classes, size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta)
 {
 
+}
+
+std::shared_ptr<VView_> VClient_::CreateView(size_t classIndex, int uniqueId, int frameAdded)
+{
+    auto it = id2View.find(uniqueId);
+    if(it != end(id2View))
+    {
+        if(auto ptr = it->second.lock())
+        {
+            assert(ptr->cl.index == classIndex);
+            return ptr;
+        }        
+    }
+
+    auto & cl = policy.classes[classIndex];
+    auto ptr = std::make_shared<VView_>(this, cl, (int)stateAlloc.Allocate(cl.sizeBytes), frameAdded);
+    id2View[uniqueId] = ptr;
+    return ptr;
 }
 
 void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
@@ -224,9 +251,6 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     auto prevPrevState = GetFrameState(prevPrevFrame);
     if(prevFrame != 0 && prevState == nullptr) return; // Malformed
     if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
-
-    // Server will never again refer to frames before this point
-    if(prevPrevState != 0) frames.erase(begin(frames), frames.find(prevPrevFrame));
 
     // Prepare arithmetic code for this frame
 	std::vector<uint8_t> bytes(buffer + 12, buffer + bufferSize);
@@ -253,8 +277,9 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
-        auto & cl = policy.classes[distribs.classDist.DecodeAndTally(decoder)];
-		views.push_back(std::make_shared<VView_>(this, cl, stateAlloc.Allocate(cl.sizeBytes), frame));
+        auto classIndex = distribs.classDist.DecodeAndTally(decoder);
+        auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
+        views.push_back(CreateView(classIndex, uniqueId, frame));
 	}
 
     auto & state = frames[frame].state;
@@ -271,6 +296,15 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder) + (prevValue * 2 - prevPrevValue);
 		}
 	}
+
+    // Server will never again refer to frames before this point
+    if(prevPrevState != 0) frames.erase(begin(frames), frames.find(prevPrevFrame));
+    frames.erase(begin(frames), frames.lower_bound(frame - policy.maxFrameDelta));
+    for(auto it = id2View.begin(); it != end(id2View); )
+    {
+        if(it->second.expired()) it = id2View.erase(it);
+        else ++it;
+    }
 }
 
 std::vector<uint8_t> VClient_::ProduceResponse()

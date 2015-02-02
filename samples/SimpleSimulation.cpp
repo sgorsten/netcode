@@ -19,7 +19,7 @@ public:
 	Server()
 	{
 		const VClass classes[] = {vCreateClass(2), vCreateClass(4)};
-		server = vCreateServer(classes, 2, 60);
+		server = vCreateServer(classes, 2, 30);
         peer1 = vCreatePeer(server);
         peer2 = vCreatePeer(server);
 
@@ -98,7 +98,6 @@ public:
 
 	std::vector<uint8_t> ProduceUpdate(int peer)
 	{
-        if(vIsPeerTimedOut(peer ? peer2 : peer1)) return {};
         auto blob = vProduceUpdate(peer ? peer2 : peer1);
         std::vector<uint8_t> buffer(vGetBlobSize(blob));
         memcpy(buffer.data(), vGetBlobData(blob), buffer.size());
@@ -122,7 +121,7 @@ public:
 		objectClass = vCreateClass(2);
 		barClass = vCreateClass(4);
 		const VClass classes [] = { objectClass, barClass };
-		client = vCreateClient(classes, 2);
+		client = vCreateClient(classes, 2, 30);
 	}
 
     size_t GetMemUsage() const { return vDebugClientMemoryUsage(client); }
@@ -200,12 +199,12 @@ int main(int argc, char * argv []) try
 
 		auto buffer0 = server.ProduceUpdate(0);
         auto buffer1 = server.ProduceUpdate(1);
-        if(!buffer0.empty() && dist(engine) > 0.2f)
+        if(dist(engine) > 0.2f)
         {
 		    auto response0 = client0.Update(buffer0);
             if(dist(engine) > 0.2f) server.ConsumeResponse(0, response0);
         }
-        if(!buffer1.empty() && dist(engine) > 0.2f)
+        if(dist(engine) > 0.2f)
         {
             auto response1 = client1.Update(buffer1);
             //if(dist(engine) > 0.2f) server.ConsumeResponse(1, response1);
