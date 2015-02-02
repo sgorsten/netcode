@@ -185,6 +185,11 @@ VView_::VView_(VClient client, const Policy::Class & cl, int stateOffset, int fr
     
 }
 
+VView_::~VView_()
+{
+    client->stateAlloc.Free(stateOffset, cl.sizeBytes);
+}
+
 int VView_::GetIntField(int index) const
 { 
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
@@ -209,13 +214,18 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
 
     // Server will never again refer to frames before this point
-    if(prevPrevState != 0) frameState.erase(begin(frameState), frameState.find(prevPrevFrame));
+    if(prevPrevState != 0) frames.erase(begin(frames), frames.find(prevPrevFrame));
 
     // Prepare arithmetic code for this frame
 	std::vector<uint8_t> bytes(buffer + 12, buffer + bufferSize);
 	arith::Decoder decoder(bytes);
-    auto & distribs = frameDistribs[frame];
-    if(prevFrame != 0) distribs = frameDistribs[prevFrame];
+    auto & distribs = frames[frame].distribs;
+    auto & views = frames[frame].views;
+    if(prevFrame != 0)
+    {
+        distribs = frames[prevFrame].distribs;
+        views = frames[prevFrame].views;
+    }
     else distribs.intFieldDists.resize(policy.numIntFields);
 
     // Decode indices of deleted objects
@@ -223,21 +233,19 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     for(int i=0; i<delObjects; ++i)
     {
         int index = DecodeUniform(decoder, views.size());
-        stateAlloc.Free(views[index]->stateOffset, views[index]->cl.sizeBytes);
-        delete views[index];
-        views[index] = 0;
+        views[index].reset();
     }
-    EraseIf(views, [](VView v) { return !v; });
+    EraseIf(views, [](const std::shared_ptr<VView_> & v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
 	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
         auto & cl = policy.classes[DecodeUniform(decoder, policy.classes.size())];
-		views.push_back(new VView_(this, cl, stateAlloc.Allocate(cl.sizeBytes), frame));
+		views.push_back(std::make_shared<VView_>(this, cl, stateAlloc.Allocate(cl.sizeBytes), frame));
 	}
 
-    auto & state = frameState[frame];
+    auto & state = frames[frame].state;
     state.resize(stateAlloc.GetTotalCapacity());
 
 	// Decode updates for each view
@@ -256,7 +264,7 @@ void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 std::vector<uint8_t> VClient_::ProduceResponse()
 {
     std::vector<uint8_t> buffer;
-    for(auto it = frameState.rbegin(); it != frameState.rend(); ++it)
+    for(auto it = frames.rbegin(); it != frames.rend(); ++it)
     {
         auto offset = buffer.size();
         buffer.resize(offset + 4);

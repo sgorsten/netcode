@@ -4,6 +4,7 @@
 #include "View.h"
 #include "Distribution.h"
 
+#include <memory>
 #include <map>
 
 class RangeAllocator
@@ -135,26 +136,32 @@ struct VView_
     int frameAdded, stateOffset;
 
 	VView_(VClient client, const Policy::Class & cl, int stateOffset, int frameAdded);
+    ~VView_();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
     int GetIntField(int index) const;
+};
+
+struct ClientFrame
+{
+    std::vector<std::shared_ptr<VView_>> views;
+    std::vector<uint8_t> state;
+    Distribs distribs;
 };
 
 struct VClient_
 {
     Policy policy;
     RangeAllocator stateAlloc;
-	std::vector<VView> views;
-    std::map<int, std::vector<uint8_t>> frameState;
-    std::map<int, Distribs> frameDistribs;
+    std::map<int, ClientFrame> frames;
 
 	VClient_(const VClass * classes, size_t numClasses);
 
-    const uint8_t * GetCurrentState() const { return frameState.rbegin()->second.data(); }
+    const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
     const uint8_t * GetFrameState(int frame) const
     {
-        auto it = frameState.find(frame);
-        return it != end(frameState) ? it->second.data() : nullptr;
+        auto it = frames.find(frame);
+        return it != end(frames) ? it->second.state.data() : nullptr;
     }
 
 	void ConsumeUpdate(const uint8_t * buffer, size_t bufferSize);

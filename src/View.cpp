@@ -30,13 +30,14 @@ void vDestroyObject(VObject object)
 
 void vConsumeUpdate(VClient client, const void * data, int size) { client->ConsumeUpdate(reinterpret_cast<const uint8_t *>(data), size); }
 VBlob vProduceResponse (VClient client) { return new VBlob_{client->ProduceResponse()}; }
-int vGetViewCount(VClient client) { return client->views.size(); }
+int vGetViewCount(VClient client) { return client->frames.empty() ? 0 : client->frames.rbegin()->second.views.size(); }
 
-VView vGetView(VClient client, int index) {	return client->views[index];}
+VView vGetView(VClient client, int index) {	return client->frames.rbegin()->second.views[index].get(); }
 VClass vGetViewClass(VView view) { return view->cl.cl; }
 int vGetViewInt(VView view, int index) { return view->GetIntField(index); }
 
 template<class A, class B> size_t MemUsage(const std::pair<A,B> & pair) { return MemUsage(pair.first) + MemUsage(pair.second); }
+template<class T> size_t MemUsage(const std::shared_ptr<T> & ptr) { return ptr ? MemUsage(ptr.get()) : 0; }
 template<class T> size_t MemUsage(const std::vector<T> & vec)
 {
     size_t total = vec.capacity() * sizeof(T);
@@ -60,11 +61,12 @@ static size_t MemUsage(const Policy & policy) { return MemUsage(policy.classes);
 static size_t MemUsage(const VObject_ * obj) { return sizeof(VObject_); }
 static size_t MemUsage(const VPeer_ * peer) { return sizeof(VPeer_) + MemUsage(peer->records) + MemUsage(peer->visChanges); }
 static size_t MemUsage(const VView_ * peer) { return sizeof(VView_); }
+static size_t MemUsage(const ClientFrame & f) { return MemUsage(f.views) + MemUsage(f.state); }
 int vDebugServerMemoryUsage(VServer server)
 {
     return sizeof(VServer_) + MemUsage(server->policy) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
 }
 int vDebugClientMemoryUsage(VClient client)
 {
-    return sizeof(VClient_) + MemUsage(client->policy) + MemUsage(client->views) + MemUsage(client->frameState);
+    return sizeof(VClient_) + MemUsage(client->policy) + MemUsage(client->frames);
 }

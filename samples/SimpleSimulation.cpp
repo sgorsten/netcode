@@ -202,15 +202,13 @@ int main(int argc, char * argv []) try
         if(dist(engine) > 0.2f)
         {
 		    auto response0 = client0.Update(buffer0);
-            server.ConsumeResponse(0, response0);
+            if(dist(engine) > 0.2f) server.ConsumeResponse(0, response0);
         }
-        else std::cout << "Drop 0" << std::endl;
         if(dist(engine) > 0.2f)
         {
             auto response1 = client1.Update(buffer1);
-            server.ConsumeResponse(1, response1);
+            if(dist(engine) > 0.2f) server.ConsumeResponse(1, response1);
         }
-        else std::cout << "Drop 1" << std::endl;
         
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
