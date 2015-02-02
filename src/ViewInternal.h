@@ -123,6 +123,7 @@ struct VPeer_
 
     VPeer_(VServer server);
 
+    int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
     void SetVisibility(const VObject_ * object, bool setVisible);
     std::vector<uint8_t> ProduceUpdate();

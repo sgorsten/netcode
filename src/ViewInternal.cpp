@@ -70,10 +70,16 @@ void VServer_::PublishFrame()
 {
     ++frame;
     frameState[frame] = state;
-    for(auto peer : peers) peer->OnPublishFrame(frame);
 
-    // Expire old frames
-    //frameState.erase(frame-3);
+    int oldestAck = INT_MAX;
+    for(auto peer : peers)
+    {
+        peer->OnPublishFrame(frame);
+        oldestAck = std::min(oldestAck, peer->GetOldestAckFrame());
+    }
+
+    // Once all clients have acknowledged a certain frame, expire all older frames
+    if(oldestAck != 0) frameState.erase(begin(frameState), frameState.find(oldestAck));
 }
 
 VPeer_::VPeer_(VServer server) : server(server)
@@ -92,7 +98,8 @@ void VPeer_::OnPublishFrame(int frame)
     }
     visChanges.clear();
 
-    //EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < frame-2; });
+    int oldestAck = GetOldestAckFrame();
+    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck; });
 }
 
 void VPeer_::SetVisibility(const VObject_ * object, bool setVisible)
