@@ -121,13 +121,14 @@ std::vector<uint8_t> VPeer_::ProduceUpdate()
     if(prevPrevFrame < cutoff) prevPrevFrame = 0;    
 
     // Encode frameset in plain ints, for now
-	std::vector<uint8_t> bytes(12);
+	std::vector<uint8_t> bytes(4);
     memcpy(bytes.data() + 0, &frame, sizeof(int32_t));
-    memcpy(bytes.data() + 4, &prevFrame, sizeof(int32_t));
-    memcpy(bytes.data() + 8, &prevPrevFrame, sizeof(int32_t));
 
     // Prepare arithmetic code for this frame
 	arith::Encoder encoder(bytes);
+    EncodeUniform(encoder, prevFrame ? frame - prevFrame : 0, server->policy.maxFrameDelta+1);
+    EncodeUniform(encoder, prevPrevFrame ? frame - prevPrevFrame : 0, server->policy.maxFrameDelta+1);
+    
     auto & distribs = frameDistribs[frame];
     if(prevFrame != 0) distribs = frameDistribs[prevFrame];
     else distribs = Distribs(server->policy);
@@ -238,23 +239,26 @@ std::shared_ptr<VView_> VClient_::CreateView(size_t classIndex, int uniqueId, in
 
 void VClient_::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
-    if(bufferSize < 12) return;
+    if(bufferSize < 4) return;
     int32_t frame, prevFrame, prevPrevFrame;
     memcpy(&frame, buffer + 0, sizeof(int32_t));
-    memcpy(&prevFrame, buffer + 4, sizeof(int32_t));
-    memcpy(&prevPrevFrame, buffer + 8, sizeof(int32_t));
 
     // Don't bother decoding messages for old frames (TODO: We may still want to decode these frames if they can improve our ack set)
     if(!frames.empty() && frames.rbegin()->first >= frame) return;
+
+    // Prepare arithmetic code for this frame
+	std::vector<uint8_t> bytes(buffer + 4, buffer + bufferSize);
+	arith::Decoder decoder(bytes);
+    prevFrame = DecodeUniform(decoder, policy.maxFrameDelta+1);
+    prevPrevFrame = DecodeUniform(decoder, policy.maxFrameDelta+1);
+    if(prevFrame) prevFrame = frame - prevFrame;
+    if(prevPrevFrame) prevPrevFrame = frame - prevPrevFrame;
     
     auto prevState = GetFrameState(prevFrame);
     auto prevPrevState = GetFrameState(prevPrevFrame);
     if(prevFrame != 0 && prevState == nullptr) return; // Malformed
     if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
 
-    // Prepare arithmetic code for this frame
-	std::vector<uint8_t> bytes(buffer + 12, buffer + bufferSize);
-	arith::Decoder decoder(bytes);
     auto & distribs = frames[frame].distribs;
     auto & views = frames[frame].views;
     if(prevFrame != 0)
