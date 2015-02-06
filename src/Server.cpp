@@ -81,16 +81,19 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 
 std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
-    int32_t frame = server->frame;
-    int32_t prevFrame = ackFrames.size() >= 1 ? ackFrames[ackFrames.size()-1] : 0;
-    int32_t prevPrevFrame = ackFrames.size() >= 2 ? ackFrames[ackFrames.size()-2] : 0;
-    int32_t cutoff = frame - server->policy.maxFrameDelta;
-    if(prevFrame < cutoff) prevFrame = 0;
-    if(prevPrevFrame < cutoff) prevPrevFrame = 0;
+    int32_t frame = server->frame, cutoff = frame - server->policy.maxFrameDelta;
+    int32_t prevFrames[4];
+    for(int i=0; i<4; ++i)
+    {
+        prevFrames[i] = ackFrames.size() > i ? ackFrames[i] : 0;
+        if(prevFrames[i] < cutoff) prevFrames[i] = 0;
+    }
 
-    CurvePredictor predictor;
-    if(prevPrevFrame != 0) predictor = MakeLinearPredictor(frame-prevFrame, frame-prevPrevFrame);
-    else if(prevFrame != 0) predictor = MakeConstantPredictor();
+    CurvePredictor predictors[5];
+    predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
+    predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
+    predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
+    predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
 
     // Encode frameset in plain ints, for now
 	std::vector<uint8_t> bytes(4);
@@ -98,11 +101,10 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
     // Prepare arithmetic code for this frame
 	arith::Encoder encoder(bytes);
-    EncodeUniform(encoder, prevFrame ? frame - prevFrame : 0, server->policy.maxFrameDelta+1);
-    EncodeUniform(encoder, prevPrevFrame ? frame - prevPrevFrame : 0, server->policy.maxFrameDelta+1);
-    
+    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, server->policy.maxFrameDelta+1);
+
     auto & distribs = frameDistribs[frame];
-    if(prevFrame != 0) distribs = frameDistribs[prevFrame];
+    if(prevFrames[0] != 0) distribs = frameDistribs[prevFrames[0]];
     else distribs = Distribs(server->policy);
 
     // Encode the indices of destroyed objects
@@ -111,7 +113,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     int index = 0;
     for(const auto & record : records)
     {
-        if(record.IsLive(prevFrame))
+        if(record.IsLive(prevFrames[0]))
         {
             if(!record.IsLive(frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
             ++index;                                                    // Either way, object was live, so it used an index
@@ -134,8 +136,8 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     }
 
     auto state = server->GetFrameState(frame);
-    auto prevState = server->GetFrameState(prevFrame);
-    auto prevPrevState = server->GetFrameState(prevPrevFrame);
+    const uint8_t * prevStates[4];
+    for(int i=0; i<4; ++i) prevStates[i] = server->GetFrameState(prevFrames[i]);
 
 	// Encode updates for each view
     for(const auto & record : records)
@@ -143,13 +145,23 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
         if(!record.IsLive(frame)) continue;
         auto object = record.object;
 
+        int sampleCount = 0;
+        for(int i=4; i>0; --i)
+        {
+            if(record.IsLive(prevFrames[i-1]))
+            {
+                sampleCount = i;
+                break;
+            }
+        }
+
         for(auto & field : object->cl.fields)
 		{
             int offset = object->stateOffset + field.offset;
             int value = reinterpret_cast<const int &>(state[offset]);
-            int prevValue = record.IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
-            int prevPrevValue = record.IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-			distribs.intFieldDists[field.distIndex].dists[2].EncodeAndTally(encoder, value - predictor(prevValue, prevPrevValue, 0, 0));
+            int prevValues[4];
+            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+			distribs.intFieldDists[field.distIndex].dists[sampleCount].EncodeAndTally(encoder, value - predictors[sampleCount](prevValues[0], prevValues[1], prevValues[2], prevValues[3]));
 		}
 	}
 
