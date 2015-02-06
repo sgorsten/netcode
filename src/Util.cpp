@@ -106,3 +106,65 @@ void RangeAllocator::Free(size_t offset, size_t amount)
 {
     freeList.push_back({offset,amount});
 }
+
+CurvePredictor::CurvePredictor(const int (&m)[4][4]) :
+    c0(m[1][1]*m[2][2]*m[3][3] + m[3][1]*m[1][2]*m[2][3] + m[2][1]*m[3][2]*m[1][3] - m[1][1]*m[3][2]*m[2][3] - m[2][1]*m[1][2]*m[3][3] - m[3][1]*m[2][2]*m[1][3]),
+    c1(m[0][1]*m[3][2]*m[2][3] + m[2][1]*m[0][2]*m[3][3] + m[3][1]*m[2][2]*m[0][3] - m[3][1]*m[0][2]*m[2][3] - m[2][1]*m[3][2]*m[0][3] - m[0][1]*m[2][2]*m[3][3]),
+    c2(m[0][1]*m[1][2]*m[3][3] + m[3][1]*m[0][2]*m[1][3] + m[1][1]*m[3][2]*m[0][3] - m[0][1]*m[3][2]*m[1][3] - m[1][1]*m[0][2]*m[3][3] - m[3][1]*m[1][2]*m[0][3]),
+    c3(m[0][1]*m[2][2]*m[1][3] + m[1][1]*m[0][2]*m[2][3] + m[2][1]*m[1][2]*m[0][3] - m[0][1]*m[1][2]*m[2][3] - m[2][1]*m[0][2]*m[1][3] - m[1][1]*m[2][2]*m[0][3]),
+    denom(m[0][0]*(m[1][1]*m[2][2]*m[3][3] + m[3][1]*m[1][2]*m[2][3] + m[2][1]*m[3][2]*m[1][3] - m[1][1]*m[3][2]*m[2][3] - m[2][1]*m[1][2]*m[3][3] - m[3][1]*m[2][2]*m[1][3])
+        + m[0][1]*(m[1][2]*m[3][3]*m[2][0] + m[2][2]*m[1][3]*m[3][0] + m[3][2]*m[2][3]*m[1][0] - m[1][2]*m[2][3]*m[3][0] - m[3][2]*m[1][3]*m[2][0] - m[2][2]*m[3][3]*m[1][0]) 
+        + m[0][2]*(m[1][3]*m[2][0]*m[3][1] + m[3][3]*m[1][0]*m[2][1] + m[2][3]*m[3][0]*m[1][1] - m[1][3]*m[3][0]*m[2][1] - m[2][3]*m[1][0]*m[3][1] - m[3][3]*m[2][0]*m[1][1])
+        + m[0][3]*(m[1][0]*m[3][1]*m[2][2] + m[2][0]*m[1][1]*m[3][2] + m[3][0]*m[2][1]*m[1][2] - m[1][0]*m[2][1]*m[3][2] - m[3][0]*m[1][1]*m[2][2] - m[2][0]*m[3][1]*m[1][2]))
+{
+
+}
+
+CurvePredictor MakeZeroPredictor() 
+{ 
+    return CurvePredictor(); 
+}
+
+CurvePredictor MakeConstantPredictor()
+{
+    const int matrix[4][4] = {
+        {1,0,0,0},
+        {0,1,0,0},
+        {0,0,1,0},
+        {0,0,0,1}
+    };
+    return CurvePredictor(matrix);
+}
+
+CurvePredictor MakeLinearPredictor(int t0, int t1)
+{
+    const int matrix[4][4] = {
+        {1,t0,0,0},
+        {1,t1,0,0},
+        {0,0,1,0},
+        {0,0,0,1}
+    };
+    return CurvePredictor(matrix);
+}
+
+CurvePredictor MakeQuadraticPredictor(int t0, int t1, int t2)
+{
+    const int matrix[4][4] = {
+        {1,t0,t0*t0,0},
+        {1,t1,t1*t1,0},
+        {1,t2,t2*t2,0},
+        {0,0,0,1}
+    };
+    return CurvePredictor(matrix);
+}
+
+CurvePredictor MakeCubicPredictor(int t0, int t1, int t2, int t3)
+{
+    const int matrix[4][4] = {
+        {1,t0,t0*t0,t0*t0*t0},
+        {1,t1,t1*t1,t1*t1*t1},
+        {1,t2,t2*t2,t2*t2*t2},
+        {1,t3,t3*t3,t3*t3*t3}
+    };
+    return CurvePredictor(matrix);
+}

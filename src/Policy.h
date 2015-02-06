@@ -33,7 +33,7 @@ struct Policy
 
 struct Distribs
 {
-    std::vector<IntegerDistribution> intFieldDists;
+    std::vector<FieldDistribution> intFieldDists;
 	IntegerDistribution newObjectCountDist, delObjectCountDist, uniqueIdDist;
     SymbolDistribution classDist;
 

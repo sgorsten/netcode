@@ -86,7 +86,11 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     int32_t prevPrevFrame = ackFrames.size() >= 2 ? ackFrames[ackFrames.size()-2] : 0;
     int32_t cutoff = frame - server->policy.maxFrameDelta;
     if(prevFrame < cutoff) prevFrame = 0;
-    if(prevPrevFrame < cutoff) prevPrevFrame = 0;    
+    if(prevPrevFrame < cutoff) prevPrevFrame = 0;
+
+    CurvePredictor predictor;
+    if(prevPrevFrame != 0) predictor = MakeLinearPredictor(frame-prevFrame, frame-prevPrevFrame);
+    else if(prevFrame != 0) predictor = MakeConstantPredictor();
 
     // Encode frameset in plain ints, for now
 	std::vector<uint8_t> bytes(4);
@@ -145,7 +149,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
             int value = reinterpret_cast<const int &>(state[offset]);
             int prevValue = record.IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
             int prevPrevValue = record.IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-			distribs.intFieldDists[field.distIndex].EncodeAndTally(encoder, value - prevValue * 2 + prevPrevValue);
+			distribs.intFieldDists[field.distIndex].dists[2].EncodeAndTally(encoder, value - predictor(prevValue, prevPrevValue, 0, 0));
 		}
 	}
 
@@ -161,6 +165,7 @@ void NCpeer::ConsumeResponse(const uint8_t * data, size_t size)
         int32_t frame;
         memcpy(&frame, data, sizeof(frame));
         newAck.push_back(frame);
+        data += 4;
         size -= 4;
     }
     if(newAck.empty()) return;

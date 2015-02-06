@@ -62,6 +62,10 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     if(prevFrame != 0 && prevState == nullptr) return; // Malformed
     if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
 
+    CurvePredictor predictor;
+    if(prevPrevFrame != 0) predictor = MakeLinearPredictor(frame-prevFrame, frame-prevPrevFrame);
+    else if(prevFrame != 0) predictor = MakeConstantPredictor();
+
     auto & distribs = frames[frame].distribs;
     auto & views = frames[frame].views;
     if(prevFrame != 0)
@@ -100,7 +104,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             int offset = view->stateOffset + field.offset;
             int prevValue = view->IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
             int prevPrevValue = view->IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder) + (prevValue * 2 - prevPrevValue);
+            reinterpret_cast<int &>(state[offset]) = predictor(prevValue, prevPrevValue, 0, 0) + distribs.intFieldDists[field.distIndex].dists[2].DecodeAndTally(decoder);
 		}
 	}
 
