@@ -22,14 +22,19 @@ struct NCclass * nunit;
 int main(int argc, char * argv[])
 {
     double t0, t1, timestep; WSADATA wsad;
-    struct Server * server; struct Client * client;
+    struct Server * server=0; struct Client * client=0;
 
     if(WSAStartup(MAKEWORD(2,0), &wsad) != 0) error("WSAStartup(...) failed.");
     if(glfwInit() != GL_TRUE) error("glfwInit() failed.");
 
     nunit = ncCreateClass(4); /* team, hp, x, y */
-    server = CreateServer(12345);
-    client = CreateClient("127.0.0.1", 12345);
+    printf("(h)ost, (j)oin, or (q)uit?\n");
+    switch(getchar())
+    {
+    case 'h': server = CreateServer(12345);
+    case 'j': client = CreateClient("127.0.0.1", 12345); break;
+    default: return EXIT_SUCCESS;
+    }
 
 	t0 = glfwGetTime();
 	while(!IsClientFinished(client))
@@ -39,11 +44,11 @@ int main(int argc, char * argv[])
 		if(timestep < 1.0 / 60) continue;
 		t0 = t1;
 
-        UpdateServer(server, (float)timestep);
+        if(server) UpdateServer(server, (float)timestep);
         UpdateClient(client);        
 	}
 
-    if(client) DestroyClient(client);
+    DestroyClient(client);
     if(server) DestroyServer(server);
 
 	glfwTerminate();
@@ -70,14 +75,19 @@ struct Unit
     struct NCobject * nobj;
 };
 
+struct Peer
+{
+    SOCKADDR_IN addr;
+    struct NCpeer * npeer;
+};
+
 struct Server
 {
     struct Unit units[20];
     struct NCserver * nserver;
 
     SOCKET serverSocket;
-    SOCKADDR_IN peerAddrs[MAX_PEERS];
-    struct NCpeer * npeers[MAX_PEERS];
+    struct Peer peers[MAX_PEERS];
     int numPeers;
 };
 
@@ -108,7 +118,6 @@ struct Server * CreateServer(int port)
 
     s->nserver = ncCreateServer(&nunit, 1, 30);
     for(i=0; i<20; ++i) SpawnUnit(s, i);
-    s->npeers[0] = ncCreatePeer(s->nserver);
 
     return s;
 }
@@ -136,8 +145,22 @@ void UpdateServer(struct Server * s, float timestep)
         int remoteLen = sizeof(remoteAddr);
         int len = recvfrom(s->serverSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
         if(len == SOCKET_ERROR) error("recvfrom(...) failed.");
-        s->peerAddrs[0] = remoteAddr;
-        ncConsumeResponse(s->npeers[0], buffer, len);
+
+        for(i=0; i<s->numPeers; ++i)
+        {
+            if(remoteAddr.sin_addr.S_un.S_addr == s->peers[i].addr.sin_addr.S_un.S_addr && remoteAddr.sin_port == s->peers[i].addr.sin_port)
+            {
+                ncConsumeResponse(s->peers[i].npeer, buffer, len);
+                break;
+            }
+        }
+        if(i == s->numPeers && i < MAX_PEERS)
+        {
+            s->peers[i].npeer = ncCreatePeer(s->nserver);
+            ncConsumeResponse(s->peers[i].npeer, buffer, len);
+            s->peers[i].addr = remoteAddr;
+            ++s->numPeers;
+        }
     }
 
     /* for each game unit on server */
@@ -182,15 +205,15 @@ void UpdateServer(struct Server * s, float timestep)
         ncSetObjectInt(s->units[i].nobj, 1, s->units[i].hp);
         ncSetObjectInt(s->units[i].nobj, 2, (int)s->units[i].x);
         ncSetObjectInt(s->units[i].nobj, 3, (int)s->units[i].y);
-        ncSetVisibility(s->npeers[0], s->units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
+        for(j=0; j<s->numPeers; ++j) ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
     }
     ncPublishFrame(s->nserver);
 
     /* send updates to peers */
-    if(s->peerAddrs[0].sin_port)
+    for(j=0; j<s->numPeers; ++j) 
     {
-        struct NCblob * nupdate = ncProduceUpdate(s->npeers[0]);
-        sendto(s->serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&s->peerAddrs[0], sizeof(s->peerAddrs[0]));
+        struct NCblob * nupdate = ncProduceUpdate(s->peers[j].npeer);
+        sendto(s->serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&s->peers[j].addr, sizeof(s->peers[j].addr));
         ncFreeBlob(nupdate);
     }
 }

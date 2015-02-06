@@ -105,8 +105,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	}
 
     // Server will never again refer to frames before this point
-    if(prevPrevState != 0) frames.erase(begin(frames), frames.find(prevPrevFrame));
-    frames.erase(begin(frames), frames.lower_bound(frame - policy.maxFrameDelta));
+    frames.erase(begin(frames), frames.lower_bound(std::min(frame - policy.maxFrameDelta, prevPrevFrame)));
     for(auto it = id2View.begin(); it != end(id2View); )
     {
         if(it->second.expired()) it = id2View.erase(it);

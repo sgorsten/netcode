@@ -50,8 +50,7 @@ void NCserver::PublishFrame()
     }
 
     // Once all clients have acknowledged a certain frame, expire all older frames
-    if(oldestAck != 0) frameState.erase(begin(frameState), frameState.find(oldestAck));
-    frameState.erase(begin(frameState), frameState.lower_bound(frame - policy.maxFrameDelta));
+    frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - policy.maxFrameDelta, oldestAck)));
 }
 
 NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
@@ -72,8 +71,7 @@ void NCpeer::OnPublishFrame(int frame)
 
     int oldestAck = GetOldestAckFrame();
     EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->policy.maxFrameDelta; });
-    if(oldestAck != 0) frameDistribs.erase(begin(frameDistribs), frameDistribs.find(oldestAck));
-    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(server->frame - server->policy.maxFrameDelta));
+    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(server->frame - server->policy.maxFrameDelta, oldestAck)));
 }
 
 void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
