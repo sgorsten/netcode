@@ -70,7 +70,7 @@ void error(const char * message)
 
 struct Unit
 {
-    int team, hp;
+    int team, hp, vis;
     float x, y;
     struct NCobject * nobj;
 };
@@ -95,6 +95,7 @@ void SpawnUnit(struct Server * s, int i)
 {
     s->units[i].team = i < 10 ? 0 : 1;
     s->units[i].hp = 100;
+    s->units[i].vis = 0;
     s->units[i].x = rand() % 320 + s->units[i].team * 960;
     s->units[i].y = rand() % 720;
     s->units[i].nobj = ncCreateObject(s->nserver, nunit);
@@ -163,6 +164,9 @@ void UpdateServer(struct Server * s, float timestep)
         }
     }
 
+    /* flag all units as invisible */
+    for(i=0; i<20; ++i) s->units[i].vis = 0;
+
     /* for each game unit on server */
     for(i=0; i<20; ++i)
     {
@@ -174,6 +178,7 @@ void UpdateServer(struct Server * s, float timestep)
             dx = s->units[j].x - s->units[i].x;
             dy = s->units[j].y - s->units[i].y;
             dist = dx*dx + dy*dy;
+            if(dist < 120*120) s->units[j].vis = 1;
             if(dist < best)
             {
                 target = j;
@@ -205,7 +210,7 @@ void UpdateServer(struct Server * s, float timestep)
         ncSetObjectInt(s->units[i].nobj, 1, s->units[i].hp);
         ncSetObjectInt(s->units[i].nobj, 2, (int)s->units[i].x);
         ncSetObjectInt(s->units[i].nobj, 3, (int)s->units[i].y);
-        for(j=0; j<s->numPeers; ++j) ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
+        for(j=0; j<s->numPeers; ++j) ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, s->units[i].team == 0 || s->units[i].vis); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
     }
     ncPublishFrame(s->nserver);
 
@@ -263,6 +268,18 @@ int IsClientFinished(struct Client * c)
     return glfwWindowShouldClose(c->win);
 }
 
+void DrawCircle(int x, int y, int radius)
+{
+    int j; float a;
+    glBegin(GL_TRIANGLE_FAN);
+    for(j=0; j<24; ++j)
+    {
+        a = 6.28f * j / 24;
+        glVertex2f(x + cosf(a)*radius, y + sinf(a)*radius);
+    }
+    glEnd();
+}
+
 void UpdateClient(struct Client * c)
 {
     int i, j, n, x, y, h; float a;
@@ -292,6 +309,19 @@ void UpdateClient(struct Client * c)
 	glClear(GL_COLOR_BUFFER_BIT);
 	glPushMatrix();
 	glOrtho(0, 1280, 720, 0, -1, +1);
+
+    /* draw unit visibility */
+    glColor3f(0.5f,0.3f,0.1f);
+    for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
+    {
+        struct NCview * nview = ncGetView(c->nclient, i);
+        if(ncGetViewClass(nview) == nunit && ncGetViewInt(nview, 0) == 0)
+        {
+            DrawCircle(ncGetViewInt(nview, 2), ncGetViewInt(nview, 3), 120);
+        }
+    }
+
+    /* draw units */
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
         struct NCview * nview = ncGetView(c->nclient, i);
@@ -300,18 +330,12 @@ void UpdateClient(struct Client * c)
             /* draw colored circle to represent unit */
             x = ncGetViewInt(nview, 2);
             y = ncGetViewInt(nview, 3);
-            glBegin(GL_TRIANGLE_FAN);
             switch(ncGetViewInt(nview, 0))
             {
             case 0: glColor3f(0,1,1); break;
             case 1: glColor3f(1,0,0); break;
             }
-            for(j=0; j<12; ++j)
-            {
-                a = 6.28f * j / 12;
-                glVertex2f(x + cosf(a)*10, y + sinf(a)*10);
-            }
-            glEnd();
+            DrawCircle(x, y, 10);
                 
             /* draw unit health bar */
             h = ncGetViewInt(nview, 1);
