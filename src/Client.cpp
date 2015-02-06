@@ -117,7 +117,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             int offset = view->stateOffset + field.offset;
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = predictors[sampleCount](prevValues[0], prevValues[1], prevValues[2], prevValues[3]) + distribs.intFieldDists[field.distIndex].dists[sampleCount].DecodeAndTally(decoder);
+            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
 		}
 	}
 

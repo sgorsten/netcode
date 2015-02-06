@@ -32,11 +32,6 @@ public:
 	int DecodeAndTally(arith::Decoder & decoder);
 };
 
-struct FieldDistribution
-{
-    IntegerDistribution dists[5];
-};
-
 class RangeAllocator
 {
     size_t totalCapacity;
@@ -55,12 +50,20 @@ struct CurvePredictor
     int c0,c1,c2,c3,denom;
     CurvePredictor() : c0(),c1(),c2(),c3(),denom(1) {}
     CurvePredictor(const int (&matrix)[4][4]);
-    int operator()(int y0, int y1, int y2, int y3) const { return (c0*y0 + c1*y1 + c2*y2 + c3*y3)/denom; }
+    int operator()(const int (&samples)[4]) const { return (c0*samples[0] + c1*samples[1] + c2*samples[2] + c3*samples[3])/denom; }
 };
 
 CurvePredictor MakeConstantPredictor();
 CurvePredictor MakeLinearPredictor(int t0, int t1);
 CurvePredictor MakeQuadraticPredictor(int t0, int t1, int t2);
 CurvePredictor MakeCubicPredictor(int t0, int t1, int t2, int t3);
+
+struct FieldDistribution
+{
+    IntegerDistribution dists[5];
+
+    void EncodeAndTally(arith::Encoder & encoder, int value, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount);
+    int DecodeAndTally(arith::Decoder & decoder, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount);
+};
 
 #endif

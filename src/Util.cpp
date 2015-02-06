@@ -168,3 +168,13 @@ CurvePredictor MakeCubicPredictor(int t0, int t1, int t2, int t3)
     };
     return CurvePredictor(matrix);
 }
+
+void FieldDistribution::EncodeAndTally(arith::Encoder & encoder, int value, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount)
+{
+    dists[sampleCount].EncodeAndTally(encoder, value - predictors[sampleCount](prevValues));
+}
+
+int FieldDistribution::DecodeAndTally(arith::Decoder & decoder, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount)
+{
+    return dists[sampleCount].DecodeAndTally(decoder) + predictors[sampleCount](prevValues);
+}

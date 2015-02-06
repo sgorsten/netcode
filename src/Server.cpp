@@ -161,7 +161,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
             int value = reinterpret_cast<const int &>(state[offset]);
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-			distribs.intFieldDists[field.distIndex].dists[sampleCount].EncodeAndTally(encoder, value - predictors[sampleCount](prevValues[0], prevValues[1], prevValues[2], prevValues[3]));
+			distribs.intFieldDists[field.distIndex].EncodeAndTally(encoder, value, prevValues, predictors, sampleCount);
 		}
 	}
 
