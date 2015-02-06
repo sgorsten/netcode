@@ -72,7 +72,7 @@ void NCpeer::OnPublishFrame(int frame)
 
     int oldestAck = GetOldestAckFrame();
     EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->policy.maxFrameDelta; });
-    frameDistribs.erase(begin(frameDistribs), frameDistribs.find(oldestAck));
+    if(oldestAck != 0) frameDistribs.erase(begin(frameDistribs), frameDistribs.find(oldestAck));
     frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(server->frame - server->policy.maxFrameDelta));
 }
 
