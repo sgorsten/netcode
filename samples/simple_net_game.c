@@ -6,28 +6,50 @@
 #include <stdio.h>
 #include <math.h>
 
-#define MAX_PEERS 16
+void error(const char * message);
 
-/* Protocol data */
+struct Server * CreateServer(int port);
+void UpdateServer(struct Server * s, float timestep);
+void DestroyServer(struct Server * s);
+
+struct Client * CreateClient(const char * ip, int port);
+void UpdateClient(struct Client * c);
+int IsClientFinished(struct Client * c);
+void DestroyClient(struct Client * c);
+
 struct NCclass * nunit;
 
-/* Server state */
-struct Unit
+int main(int argc, char * argv[])
 {
-    int team, hp;
-    float x, y;
-    struct NCobject * nobj;
-} units[20];
-struct NCserver * nserver;
+    double t0, t1, timestep; WSADATA wsad;
+    struct Server * server; struct Client * client;
 
-SOCKET serverSocket;
-SOCKADDR_IN peerAddrs[MAX_PEERS];
-struct NCpeer * npeers[MAX_PEERS];
+    if(WSAStartup(MAKEWORD(2,0), &wsad) != 0) error("WSAStartup(...) failed.");
+    if(glfwInit() != GL_TRUE) error("glfwInit() failed.");
 
-/* Client state */
-SOCKET clientSocket;
-struct NCclient * nclient;
-GLFWwindow * win;
+    nunit = ncCreateClass(4); /* team, hp, x, y */
+    server = CreateServer(12345);
+    client = CreateClient("127.0.0.1", 12345);
+
+	t0 = glfwGetTime();
+	while(!IsClientFinished(client))
+	{
+		glfwPollEvents();
+		t1 = glfwGetTime(), timestep = t1 - t0;
+		if(timestep < 1.0 / 60) continue;
+		t0 = t1;
+
+        UpdateServer(server, (float)timestep);
+        UpdateClient(client);        
+	}
+
+    if(client) DestroyClient(client);
+    if(server) DestroyServer(server);
+
+	glfwTerminate();
+    WSACleanup();
+    return EXIT_SUCCESS;
+}
 
 void error(const char * message)
 {
@@ -35,206 +57,255 @@ void error(const char * message)
     exit(EXIT_FAILURE);
 }
 
-void spawn_unit(int i)
+/**********
+ * Server *
+ **********/
+
+#define MAX_PEERS 16
+
+struct Unit
 {
-    units[i].team = i < 10 ? 0 : 1;
-    units[i].hp = 100;
-    units[i].x = rand() % 320 + units[i].team * 960;
-    units[i].y = rand() % 720;
-    units[i].nobj = ncCreateObject(nserver, nunit);
+    int team, hp;
+    float x, y;
+    struct NCobject * nobj;
+};
+
+struct Server
+{
+    struct Unit units[20];
+    struct NCserver * nserver;
+
+    SOCKET serverSocket;
+    SOCKADDR_IN peerAddrs[MAX_PEERS];
+    struct NCpeer * npeers[MAX_PEERS];
+    int numPeers;
+};
+
+void SpawnUnit(struct Server * s, int i)
+{
+    s->units[i].team = i < 10 ? 0 : 1;
+    s->units[i].hp = 100;
+    s->units[i].x = rand() % 320 + s->units[i].team * 960;
+    s->units[i].y = rand() % 720;
+    s->units[i].nobj = ncCreateObject(s->nserver, nunit);
 }
 
-int main(int argc, char * argv[])
+struct Server * CreateServer(int port)
 {
-    int i, j, n, x, y, h; double a, t0, t1, timestep; 
-    struct NCblob * nupdate, * nresponse; struct NCview * nview;
-    WSADATA wsad;
+    int i; struct Server * s;
 
-    WSAStartup(MAKEWORD(2,0), &wsad);
+    s = malloc(sizeof(struct Server));
+    memset(s, 0, sizeof(struct Server));
 
-    serverSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if(serverSocket == INVALID_SOCKET) error("socket(...) failed.");
+    s->serverSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if(s->serverSocket == INVALID_SOCKET) error("socket(...) failed.");
 
     SOCKADDR_IN serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(12345);
-    if(bind(serverSocket, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) error("bind(...) failed.");
+    serverAddr.sin_port = htons(port);
+    if(bind(s->serverSocket, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) error("bind(...) failed.");
 
-    clientSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if(clientSocket == INVALID_SOCKET) error("socket(...) failed.");
+    s->nserver = ncCreateServer(&nunit, 1, 30);
+    for(i=0; i<20; ++i) SpawnUnit(s, i);
+    s->npeers[0] = ncCreatePeer(s->nserver);
 
-    SOCKADDR_IN clientServerAddr;
-    clientServerAddr.sin_family = AF_INET;
-    clientServerAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    clientServerAddr.sin_port = htons(12345);
+    return s;
+}
 
-    char buffer[] = "Hello server!";
-    sendto(clientSocket, buffer, sizeof(buffer), 0, (const SOCKADDR *)&clientServerAddr, sizeof(clientServerAddr));
+void DestroyServer(struct Server * s)
+{
+    closesocket(s->serverSocket);
+    free(s);
+}
 
-    char recvbuf[2000];
-    SOCKADDR_IN serverClientAddr;
-    int len = sizeof(serverClientAddr);
-    int recvLen = recvfrom(serverSocket, recvbuf, sizeof(recvbuf), 0, (SOCKADDR *)&serverClientAddr, &len);
-    recvbuf[recvLen] = 0;
-    printf("Received %s\n", recvbuf);
-
-    nunit = ncCreateClass(4); /* team, hp, x, y */
-
-    /* init server */
-    nserver = ncCreateServer(&nunit, 1, 30);
-    for(i=0; i<20; ++i) spawn_unit(i);
-    npeers[0] = ncCreatePeer(nserver);
+void UpdateServer(struct Server * s, float timestep)
+{
+    int i, j; struct timeval tv; fd_set fds;
     
-    /* init client */
-    nclient = ncCreateClient(&nunit, 1, 30);    
-    if (glfwInit() != GL_TRUE) error("glfwInit() failed.");
-	win = glfwCreateWindow(1280, 720, "Simple Game", NULL, NULL);
-	if (!win) error("glfwCreateWindow(...) failed.");
-	glfwMakeContextCurrent(win);
+    /* read any incoming messages on our socket */
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000;
+    FD_ZERO(&fds);
+    FD_SET(s->serverSocket, &fds);
+    if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
+    if(FD_ISSET(s->serverSocket, &fds))
+    {
+        char buffer[2000];
+        SOCKADDR_IN remoteAddr;
+        int remoteLen = sizeof(remoteAddr);
+        int len = recvfrom(s->serverSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
+        if(len == SOCKET_ERROR) error("recvfrom(...) failed.");
+        s->peerAddrs[0] = remoteAddr;
+        ncConsumeResponse(s->npeers[0], buffer, len);
+    }
 
-    /* main loop */
-	t0 = glfwGetTime();
-	while (!glfwWindowShouldClose(win))
-	{
-		glfwPollEvents();
-		t1 = glfwGetTime(), timestep = t1 - t0;
-		if (timestep < 1.0 / 60) continue;
-		t0 = t1;
-
-        /* for each game unit on server */
-        for(i=0; i<20; ++i)
+    /* for each game unit on server */
+    for(i=0; i<20; ++i)
+    {
+        /* select a target */
+        int target=0; float dx, dy, dist, best=HUGE_VALF;
+        for(j=0; j<20; ++j)
         {
-            /* select a target */
-            int target=0; float dx, dy, dist, best=HUGE_VALF;
-            for(j=0; j<20; ++j)
+            if(s->units[i].team == s->units[j].team) continue;
+            dx = s->units[j].x - s->units[i].x;
+            dy = s->units[j].y - s->units[i].y;
+            dist = dx*dx + dy*dy;
+            if(dist < best)
             {
-                if(units[i].team == units[j].team) continue;
-                dx = units[j].x - units[i].x;
-                dy = units[j].y - units[i].y;
-                dist = dx*dx + dy*dy;
-                if(dist < best)
-                {
-                    target = j;
-                    best = dist;
-                }
+                target = j;
+                best = dist;
             }
+        }
 
-            /* pursure target */
-            dx = units[target].x - units[i].x;
-            dy = units[target].y - units[i].y;
-            dist = sqrtf(dx*dx + dy*dy);
-            if(dist > 50) /* if far, move towards target */
+        /* pursue target */
+        dx = s->units[target].x - s->units[i].x;
+        dy = s->units[target].y - s->units[i].y;
+        dist = sqrtf(dx*dx + dy*dy);
+        if(dist > 50) /* if far, move towards target */
+        {
+            s->units[i].x += dx * 50 * timestep / dist;
+            s->units[i].y += dy * 50 * timestep / dist;
+        }
+        else /* if near, attack target */
+        {
+            --s->units[target].hp;
+            if(s->units[target].hp < 1) /* if target is dead, destroy and respawn */
             {
-                units[i].x += dx * 50 * timestep / dist;
-                units[i].y += dy * 50 * timestep / dist;
+                ncDestroyObject(s->units[target].nobj);
+                SpawnUnit(s, target);
             }
-            else /* if near, attack target */
-            {
-                --units[target].hp;
-                if(units[target].hp < 1) /* if target is dead, destroy and respawn */
-                {
-                    ncDestroyObject(units[target].nobj);
-                    spawn_unit(target);
-                }
-            }
+        }
             
-            /* update corresponding netcode object */
-            ncSetObjectInt(units[i].nobj, 0, units[i].team);
-            ncSetObjectInt(units[i].nobj, 1, units[i].hp);
-            ncSetObjectInt(units[i].nobj, 2, (int)units[i].x);
-            ncSetObjectInt(units[i].nobj, 3, (int)units[i].y);
-            ncSetVisibility(npeers[0], units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
-        }
-        ncPublishFrame(nserver);
+        /* update corresponding netcode object */
+        ncSetObjectInt(s->units[i].nobj, 0, s->units[i].team);
+        ncSetObjectInt(s->units[i].nobj, 1, s->units[i].hp);
+        ncSetObjectInt(s->units[i].nobj, 2, (int)s->units[i].x);
+        ncSetObjectInt(s->units[i].nobj, 3, (int)s->units[i].y);
+        ncSetVisibility(s->npeers[0], s->units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
+    }
+    ncPublishFrame(s->nserver);
 
-        /* check for incoming data on any sockets */
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 1000;
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(serverSocket, &fds);
-        FD_SET(clientSocket, &fds);
-        if(select(2, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
-        if(FD_ISSET(serverSocket, &fds))
-        {
-            char buffer[2000];
-            SOCKADDR_IN remoteAddr;
-            int remoteLen = sizeof(remoteAddr);
-            int len = recvfrom(serverSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
-            if(recvfrom == SOCKET_ERROR) error("recvfrom(...) failed.");
-            peerAddrs[0] = remoteAddr;
-            ncConsumeResponse(npeers[0], buffer, len);
-        }
-        if(FD_ISSET(clientSocket, &fds))
-        {
-            char buffer[2000];
-            SOCKADDR_IN remoteAddr;
-            int remoteLen = sizeof(remoteAddr);
-            int len = recvfrom(clientSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
-            if(recvfrom == SOCKET_ERROR) error("recvfrom(...) failed.");
-            ncConsumeUpdate(nclient, buffer, len);
-        }
+    /* send updates to peers */
+    if(s->peerAddrs[0].sin_port)
+    {
+        struct NCblob * nupdate = ncProduceUpdate(s->npeers[0]);
+        sendto(s->serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&s->peerAddrs[0], sizeof(s->peerAddrs[0]));
+        ncFreeBlob(nupdate);
+    }
+}
 
-        if(peerAddrs[0].sin_port)
-        {
-            nupdate = ncProduceUpdate(npeers[0]);
-            sendto(serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&peerAddrs[0], sizeof(peerAddrs[0]));
-            ncFreeBlob(nupdate);
-        }
+/**********
+ * Client *
+ **********/
 
-        nresponse = ncProduceResponse(nclient);
-        sendto(clientSocket, (const char *)ncGetBlobData(nresponse), ncGetBlobSize(nresponse), 0, (const SOCKADDR *)&clientServerAddr, sizeof(clientServerAddr));
-        ncConsumeResponse(npeers[0], ncGetBlobData(nresponse), ncGetBlobSize(nresponse));
+struct Client
+{
+    SOCKET clientSocket;
+    SOCKADDR_IN serverAddr;
+    struct NCclient * nclient;
+    GLFWwindow * win;
+};
 
-        /* redraw client */        
-		glClear(GL_COLOR_BUFFER_BIT);
-		glPushMatrix();
-		glOrtho(0, 1280, 720, 0, -1, +1);
-        for(i=0, n=ncGetViewCount(nclient); i<n; ++i)
+struct Client * CreateClient(const char * ip, int port)
+{
+    struct Client * c;
+
+    c = malloc(sizeof(struct Client));
+    memset(c, 0, sizeof(struct Client));
+
+    c->clientSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if(c->clientSocket == INVALID_SOCKET) error("socket(...) failed.");
+
+    c->serverAddr.sin_family = AF_INET;
+    c->serverAddr.sin_addr.s_addr = inet_addr(ip);
+    c->serverAddr.sin_port = htons(port);
+
+    c->nclient = ncCreateClient(&nunit, 1, 30);    
+	c->win = glfwCreateWindow(1280, 720, "Simple Game", NULL, NULL);
+	if (!c->win) error("glfwCreateWindow(...) failed.");
+	glfwMakeContextCurrent(c->win);
+
+    return c;
+}
+
+void DestroyClient(struct Client * s)
+{
+    closesocket(s->clientSocket);
+    free(s);
+}
+
+int IsClientFinished(struct Client * c)
+{
+    return glfwWindowShouldClose(c->win);
+}
+
+void UpdateClient(struct Client * c)
+{
+    int i, j, n, x, y, h; float a;
+
+    /* check for incoming data on any sockets */
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 1000;
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(c->clientSocket, &fds);
+    if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
+    if(FD_ISSET(c->clientSocket, &fds))
+    {
+        char buffer[2000];
+        SOCKADDR_IN remoteAddr;
+        int remoteLen = sizeof(remoteAddr);
+        int len = recvfrom(c->clientSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
+        if(len == SOCKET_ERROR) error("recvfrom(...) failed.");
+        ncConsumeUpdate(c->nclient, buffer, len);
+    }
+
+    struct NCblob * nresponse = ncProduceResponse(c->nclient);
+    sendto(c->clientSocket, (const char *)ncGetBlobData(nresponse), ncGetBlobSize(nresponse), 0, (const SOCKADDR *)&c->serverAddr, sizeof(c->serverAddr));
+
+    /* redraw client */        
+	glClear(GL_COLOR_BUFFER_BIT);
+	glPushMatrix();
+	glOrtho(0, 1280, 720, 0, -1, +1);
+    for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
+    {
+        struct NCview * nview = ncGetView(c->nclient, i);
+        if(ncGetViewClass(nview) == nunit)
         {
-            nview = ncGetView(nclient, i);
-            if(ncGetViewClass(nview) == nunit)
+            /* draw colored circle to represent unit */
+            x = ncGetViewInt(nview, 2);
+            y = ncGetViewInt(nview, 3);
+            glBegin(GL_TRIANGLE_FAN);
+            switch(ncGetViewInt(nview, 0))
             {
-                /* draw colored circle to represent unit */
-                x = ncGetViewInt(nview, 2);
-                y = ncGetViewInt(nview, 3);
-                glBegin(GL_TRIANGLE_FAN);
-                switch(ncGetViewInt(nview, 0))
-                {
-                case 0: glColor3f(0,1,1); break;
-                case 1: glColor3f(1,0,0); break;
-                }
-                for(j=0; j<12; ++j)
-                {
-                    a = 6.28 * j / 12;
-                    glVertex2d(x + cos(a)*10, y + sin(a)*10);
-                }
-                glEnd();
-                
-                /* draw unit health bar */
-                h = ncGetViewInt(nview, 1);
-                glBegin(GL_QUADS);
-                glColor3f(0,1,0);
-                glVertex2i(x-10, y-13);
-                glVertex2i(x-10+(h*20/100), y-13);
-                glVertex2i(x-10+(h*20/100), y-11);
-                glVertex2i(x-10, y-11);
-                glColor3f(0.5f,0.2f,0);
-                glVertex2i(x-10+(h*20/100), y-13);
-                glVertex2i(x+10, y-13);
-                glVertex2i(x+10, y-11);
-                glVertex2i(x-10+(h*20/100), y-11);
-                glEnd();
+            case 0: glColor3f(0,1,1); break;
+            case 1: glColor3f(1,0,0); break;
             }
+            for(j=0; j<12; ++j)
+            {
+                a = 6.28f * j / 12;
+                glVertex2f(x + cosf(a)*10, y + sinf(a)*10);
+            }
+            glEnd();
+                
+            /* draw unit health bar */
+            h = ncGetViewInt(nview, 1);
+            glBegin(GL_QUADS);
+            glColor3f(0,1,0);
+            glVertex2i(x-10, y-13);
+            glVertex2i(x-10+(h*20/100), y-13);
+            glVertex2i(x-10+(h*20/100), y-11);
+            glVertex2i(x-10, y-11);
+            glColor3f(0.5f,0.2f,0);
+            glVertex2i(x-10+(h*20/100), y-13);
+            glVertex2i(x+10, y-13);
+            glVertex2i(x+10, y-11);
+            glVertex2i(x-10+(h*20/100), y-11);
+            glEnd();
         }
-        glPopMatrix();
-		glfwSwapBuffers(win);
-	}
-
-	glfwDestroyWindow(win);
-	glfwTerminate();
-    WSACleanup();
-    return EXIT_SUCCESS;
+    }
+    glPopMatrix();
+	glfwSwapBuffers(c->win);
 }
