@@ -89,8 +89,8 @@ namespace netcode
     static int CountSignificantBits(int value)
     {
 	    int sign = value < 0 ? -1 : 0;
-	    for (int i = 0; i < 31; ++i) if (value >> i == sign) return i + 1;
-	    return 32;
+	    for (int i = 0; i < 31; ++i) if (value >> i == sign) return i;
+	    return 31;
     }
 
     IntegerDistribution::IntegerDistribution() : dist(64)
@@ -101,20 +101,20 @@ namespace netcode
     float IntegerDistribution::GetExpectedCost() const
     {
         float cost = 0;
-        for(int bits=1; bits<=32; ++bits)
+        for(int bits=0; bits<32; ++bits)
         {
-            float p = dist.GetProbability(bits-1);
-            cost += p * (-log(p) + bits-1);
+            float p = dist.GetProbability(bits);
+            cost += p * (-log(p) + bits);
 
-            p = dist.GetProbability(bits-1 + 32);
-            cost += p * (-log(p) + bits-1);
+            p = dist.GetProbability(bits + 32);
+            cost += p * (-log(p) + bits);
         }
         return cost;
     }
 
     void IntegerDistribution::Tally(int value)
     {
-        int bits = CountSignificantBits(value);
+        int bits = CountSignificantBits(value)+1;
         int bucket = bits-1 + (value < 0 ? 32 : 0);
         dist.Tally(bucket);
     }
@@ -122,21 +122,20 @@ namespace netcode
     void IntegerDistribution::EncodeAndTally(ArithmeticEncoder & encoder, int value)
     {
 	    int bits = CountSignificantBits(value);
-        int bucket = bits-1 + (value < 0 ? 32 : 0);
+        int bucket = bits + (value < 0 ? 32 : 0);
         dist.EncodeAndTally(encoder, bucket);
 
-        uint32_t val = value;
-        val &= ~(-1U << (bits-1)); // remove all insignificant bits, and the most significant bit (since sign is known from the bucket index)
-	    EncodeUniform(encoder, val, 1 << (bits-1));
+        value &= ~(-1U << bits); // remove the upper bits of the integer (all those which match the sign bit)
+	    EncodeUniform(encoder, value, 1 << bits); // encode the lower bits of the integer
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
         int bucket = dist.DecodeAndTally(decoder);
-        int bits = (bucket & 0x1F) + 1;
-        uint32_t val = DecodeUniform(decoder, 1 << (bits-1));
-        if(bucket & 0x20) val |= (-1U << (bits-1)); // regenerate the sign bit from the bucket index
-	    return val;
+        int bits = (bucket & 0x1F);
+        int value = DecodeUniform(decoder, 1 << bits); // decode the lower bits of the integer
+        if(bucket & 0x20) value |= (-1U << bits); // regenerate the upper bits from the bucket sign
+	    return value;
     }
 
     RangeAllocator::RangeAllocator() : totalCapacity()
