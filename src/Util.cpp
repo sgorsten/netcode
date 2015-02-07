@@ -21,6 +21,35 @@ namespace netcode
 
     }
 
+    float SymbolDistribution::GetProbability(size_t symbol) const
+    {
+        assert(symbol < counts.size());
+
+        code_t a = 0;
+	    for (size_t i = 0; i < symbol; ++i) a += counts[i];
+	    code_t b = a + counts[symbol], d = b;
+	    for (size_t i = symbol + 1; i < counts.size(); ++i) d += counts[i];
+
+	    return float(b-a) / d;
+    }
+
+    float SymbolDistribution::GetExpectedCost() const
+    {
+        float cost = 0;
+        for(size_t i=0; i<counts.size(); ++i)
+        {
+            float p = GetProbability(i);
+            cost += p * -log(p);
+        }
+        return cost;
+    }
+
+    void SymbolDistribution::Tally(size_t symbol)
+    {
+        assert(symbol < counts.size());
+        ++counts[symbol];
+    }
+
     void SymbolDistribution::EncodeAndTally(ArithmeticEncoder & encoder, size_t symbol)
     {
         assert(symbol < counts.size());
@@ -31,7 +60,7 @@ namespace netcode
 	    for (size_t i = symbol + 1; i < counts.size(); ++i) d += counts[i];
 	    encoder.Encode(a, b, d);
 
-	    ++counts[symbol];
+	    Tally(symbol);
     }
 
     size_t SymbolDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
@@ -47,7 +76,7 @@ namespace netcode
 		    if (b > x)
 		    {
 			    decoder.Confirm(a, b);
-			    ++counts[i];
+                Tally(i);
                 return i;
 		    }
 		    a = b;
@@ -69,16 +98,33 @@ namespace netcode
 
     }
 
+    float IntegerDistribution::GetExpectedCost() const
+    {
+        float cost = 0;
+        for(int bits=0; bits<32; ++bits)
+        {
+            float p = dist.GetProbability(bits);
+            cost += p * (-log(p) + bits);
+        }
+        return cost;
+    }
+
+    void IntegerDistribution::Tally(int value)
+    {
+        int bits = CountSignificantBits(value);
+        dist.Tally(bits-1);
+    }
+
     void IntegerDistribution::EncodeAndTally(ArithmeticEncoder & encoder, int value)
     {
 	    int bits = CountSignificantBits(value);
-        dist.EncodeAndTally(encoder, bits);
+        dist.EncodeAndTally(encoder, bits-1);
 	    EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
-        int bits = dist.DecodeAndTally(decoder);
+        int bits = 1+dist.DecodeAndTally(decoder);
 	    return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
     }
 
@@ -171,13 +217,34 @@ namespace netcode
         return CurvePredictor(matrix);
     }
 
+    int FieldDistribution::GetBestDistribution(int sampleCount) const
+    {
+        int bestDist = 0;
+        float bestCost = dists[0].GetExpectedCost();
+        for(int i=1; i<sampleCount; ++i)
+        {
+            float cost = dists[i].GetExpectedCost();
+            if(cost < bestCost)
+            {
+                bestDist = i;
+                bestCost = cost;
+            }
+        }
+        return bestDist;
+    }
+
     void FieldDistribution::EncodeAndTally(ArithmeticEncoder & encoder, int value, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount)
     {
-        dists[sampleCount].EncodeAndTally(encoder, value - predictors[sampleCount](prevValues));
+        int best = GetBestDistribution(sampleCount);
+        dists[best].EncodeAndTally(encoder, value - predictors[best](prevValues));
+        for(int i=0; i<sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
     }
 
     int FieldDistribution::DecodeAndTally(ArithmeticDecoder & decoder, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount)
     {
-        return dists[sampleCount].DecodeAndTally(decoder) + predictors[sampleCount](prevValues);
+        int best = GetBestDistribution(sampleCount);
+        int value = dists[best].DecodeAndTally(decoder) + predictors[best](prevValues);
+        for(int i=0; i<sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
+        return value;
     }
 }

@@ -20,6 +20,10 @@ namespace netcode
         SymbolDistribution() {}
         SymbolDistribution(size_t symbols);
 
+        float GetProbability(size_t symbol) const;
+        float GetExpectedCost() const;
+
+        void Tally(size_t symbol);
         void EncodeAndTally(ArithmeticEncoder & encoder, size_t symbol);
 	    size_t DecodeAndTally(ArithmeticDecoder & decoder);
     };
@@ -30,6 +34,9 @@ namespace netcode
     public:
 	    IntegerDistribution();
 
+        float GetExpectedCost() const;
+
+        void Tally(int value);
 	    void EncodeAndTally(ArithmeticEncoder & encoder, int value);
 	    int DecodeAndTally(ArithmeticDecoder & decoder);
     };
@@ -64,6 +71,7 @@ namespace netcode
     {
         IntegerDistribution dists[5];
 
+        int GetBestDistribution(int sampleCount) const;
         void EncodeAndTally(ArithmeticEncoder & encoder, int value, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount);
         int DecodeAndTally(ArithmeticDecoder & decoder, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount);
     };

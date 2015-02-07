@@ -44,12 +44,12 @@ namespace netcode
 
 using namespace netcode;
 
-int ncDebugServerMemoryUsage(NCserver * server)
+int ncxServerMemoryUsage(NCserver * server)
 {
     return sizeof(NCserver) + MemUsage(server->policy) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
 }
 
-int ncDebugClientMemoryUsage(NCclient * client)
+int ncxClientMemoryUsage(NCclient * client)
 {
     return sizeof(NCclient) + MemUsage(client->policy) + MemUsage(client->frames);
 }
