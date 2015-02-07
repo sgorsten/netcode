@@ -6,20 +6,22 @@
 #include <math.h>
 
 /* Protocol data */
-struct NCclass * nunit;
+struct NCprotocol * protocol;
+struct NCclass * unitClass;
+struct NCint * teamField, * hpField, * xField, * yField;
 
 /* Server state */
 struct Unit
 {
     int team, hp;
     float x, y;
-    struct NCobject * nobj;
+    struct NCobject * object;
 } units[20];
-struct NCserver * nserver;
-struct NCpeer * npeer;
+struct NCserver * server;
+struct NCpeer * peer;
 
 /* Client state */
-struct NCclient * nclient;
+struct NCclient * client;
 GLFWwindow * win;
 
 void error(const char * message)
@@ -34,23 +36,29 @@ void spawn_unit(int i)
     units[i].hp = 100;
     units[i].x = rand() % 320 + units[i].team * 960;
     units[i].y = rand() % 720;
-    units[i].nobj = ncCreateObject(nserver, nunit);
+    units[i].object = ncCreateObject(server, unitClass);
 }
 
 int main(int argc, char * argv[])
 {
     int i, j, n, x, y, h; double a, t0, t1, timestep; 
-    struct NCblob * nupdate, * nresponse; struct NCview * nview;
+    struct NCblob * updateBlob, * responseBlob; struct NCview * view;
 
-    nunit = ncCreateClass(4); /* team, hp, x, y */
+    /* init protocol */
+    protocol = ncCreateProtocol(30);
+    unitClass = ncCreateClass(protocol);
+    teamField = ncCreateInt(unitClass);
+    hpField = ncCreateInt(unitClass);
+    xField = ncCreateInt(unitClass);
+    yField = ncCreateInt(unitClass);
 
     /* init server */
-    nserver = ncCreateServer(&nunit, 1, 30);
+    server = ncCreateServer(protocol);
     for(i=0; i<20; ++i) spawn_unit(i);
-    npeer = ncCreatePeer(nserver);
+    peer = ncCreatePeer(server);
     
     /* init client */
-    nclient = ncCreateClient(&nunit, 1, 30);    
+    client = ncCreateClient(protocol);
     if (glfwInit() != GL_TRUE) error("glfwInit() failed.");
 	win = glfwCreateWindow(1280, 720, "Simple Game", NULL, NULL);
 	if (!win) error("glfwCreateWindow(...) failed.");
@@ -96,50 +104,50 @@ int main(int argc, char * argv[])
                 --units[target].hp;
                 if(units[target].hp < 1) /* if target is dead, destroy and respawn */
                 {
-                    ncDestroyObject(units[target].nobj);
+                    ncDestroyObject(units[target].object);
                     spawn_unit(target);
                 }
             }
             
             /* update corresponding netcode object */
-            ncSetObjectInt(units[i].nobj, 0, units[i].team);
-            ncSetObjectInt(units[i].nobj, 1, units[i].hp);
-            ncSetObjectInt(units[i].nobj, 2, (int)units[i].x);
-            ncSetObjectInt(units[i].nobj, 3, (int)units[i].y);
-            ncSetVisibility(npeer, units[i].nobj, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
+            ncSetObjectInt(units[i].object, teamField, units[i].team);
+            ncSetObjectInt(units[i].object, hpField, units[i].hp);
+            ncSetObjectInt(units[i].object, xField, (int)units[i].x);
+            ncSetObjectInt(units[i].object, yField, (int)units[i].y);
+            ncSetVisibility(peer, units[i].object, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
         }
-        ncPublishFrame(nserver);
+        ncPublishFrame(server);
 
         /* simulate network traffic */
-        nupdate = ncProduceUpdate(npeer);
+        updateBlob = ncProduceUpdate(peer);
         if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from server to client via UDP */
         {
-            ncConsumeUpdate(nclient, ncGetBlobData(nupdate), ncGetBlobSize(nupdate));
+            ncConsumeUpdate(client, ncGetBlobData(updateBlob), ncGetBlobSize(updateBlob));
 
-            nresponse = ncProduceResponse(nclient);
+            responseBlob = ncProduceResponse(client);
             if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from client to server via UDP */
             {
-                ncConsumeResponse(npeer, ncGetBlobData(nresponse), ncGetBlobSize(nresponse));
+                ncConsumeResponse(peer, ncGetBlobData(responseBlob), ncGetBlobSize(responseBlob));
             }
-            ncFreeBlob(nresponse);
+            ncFreeBlob(responseBlob);
         }
-        printf("Update size: %d B\n", ncGetBlobSize(nupdate));
-        ncFreeBlob(nupdate);
+        printf("Update size: %d B\n", ncGetBlobSize(updateBlob));
+        ncFreeBlob(updateBlob);
 
         /* redraw client */        
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
-        for(i=0, n=ncGetViewCount(nclient); i<n; ++i)
+        for(i=0, n=ncGetViewCount(client); i<n; ++i)
         {
-            nview = ncGetView(nclient, i);
-            if(ncGetViewClass(nview) == nunit)
+            view = ncGetView(client, i);
+            if(ncGetViewClass(view) == unitClass)
             {
                 /* draw colored circle to represent unit */
-                x = ncGetViewInt(nview, 2);
-                y = ncGetViewInt(nview, 3);
+                x = ncGetViewInt(view, xField);
+                y = ncGetViewInt(view, yField);
                 glBegin(GL_TRIANGLE_FAN);
-                switch(ncGetViewInt(nview, 0))
+                switch(ncGetViewInt(view, teamField))
                 {
                 case 0: glColor3f(0,1,1); break;
                 case 1: glColor3f(1,0,0); break;
@@ -152,7 +160,7 @@ int main(int argc, char * argv[])
                 glEnd();
                 
                 /* draw unit health bar */
-                h = ncGetViewInt(nview, 1);
+                h = ncGetViewInt(view, hpField);
                 glBegin(GL_QUADS);
                 glColor3f(0,1,0);
                 glVertex2i(x-10, y-13);
@@ -173,7 +181,7 @@ int main(int argc, char * argv[])
         glfwPollEvents();
 	}
 
-    ncxPrintClientCodeEfficiency(nclient);
+    ncxPrintClientCodeEfficiency(client);
 
 	glfwDestroyWindow(win);
 	glfwTerminate();

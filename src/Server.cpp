@@ -2,17 +2,18 @@
 
 using namespace netcode;
 
-NCobject::NCobject(NCserver * server, const Policy::Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
+NCobject::NCobject(NCserver * server, NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
 }
 
-void NCobject::SetIntField(int index, int value)
+void NCobject::SetIntField(NCint * field, int value)
 { 
-    reinterpret_cast<int &>(server->state[stateOffset + cl.fields[index].offset]) = value; 
+    if(field->cl != cl) return;
+    reinterpret_cast<int &>(server->state[stateOffset + field->dataOffset]) = value; 
 }
 
-NCserver::NCserver(NCclass * const * classes, size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta), frame()
+NCserver::NCserver(NCprotocol * protocol) : protocol(protocol), frame()
 {
 
 }
@@ -24,19 +25,14 @@ NCpeer * NCserver::CreatePeer()
 	return peer;    
 }
 
-NCobject * NCserver::CreateObject(NCclass * objectClass)
+NCobject * NCserver::CreateObject(NCclass * cl)
 {
-    for(auto & cl : policy.classes)
-    {
-        if(cl.cl == objectClass)
-        {
-	        auto object = new NCobject(this, cl, stateAlloc.Allocate(cl.sizeBytes));
-            if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
-	        objects.push_back(object);
-	        return object;
-        }
-    }
-    return nullptr;
+    if(cl->protocol != protocol) return nullptr;
+
+	auto object = new NCobject(this, cl, stateAlloc.Allocate(cl->sizeInBytes));
+    if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
+	objects.push_back(object);
+	return object;
 }
 
 void NCserver::PublishFrame()
@@ -52,7 +48,7 @@ void NCserver::PublishFrame()
     }
 
     // Once all clients have acknowledged a certain frame, expire all older frames
-    frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - policy.maxFrameDelta, oldestAck)));
+    frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - protocol->maxFrameDelta, oldestAck)));
 }
 
 NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
@@ -72,8 +68,8 @@ void NCpeer::OnPublishFrame(int frame)
     visChanges.clear();
 
     int oldestAck = GetOldestAckFrame();
-    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->policy.maxFrameDelta; });
-    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(server->frame - server->policy.maxFrameDelta, oldestAck)));
+    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->protocol->maxFrameDelta; });
+    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(server->frame - server->protocol->maxFrameDelta, oldestAck)));
 }
 
 void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
@@ -83,7 +79,7 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 
 std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
-    int32_t frame = server->frame, cutoff = frame - server->policy.maxFrameDelta;
+    int32_t frame = server->frame, cutoff = frame - server->protocol->maxFrameDelta;
     int32_t prevFrames[4];
     for(int i=0; i<4; ++i)
     {
@@ -103,11 +99,11 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
     // Prepare arithmetic code for this frame
 	ArithmeticEncoder encoder(bytes);
-    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, server->policy.maxFrameDelta+1);
+    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, server->protocol->maxFrameDelta+1);
 
     auto & distribs = frameDistribs[frame];
     if(prevFrames[0] != 0) distribs = frameDistribs[prevFrames[0]];
-    else distribs = Distribs(server->policy);
+    else distribs = Distribs(*server->protocol);
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -133,7 +129,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 	distribs.newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
 	for (auto record : newObjects)
     {
-        distribs.classDist.EncodeAndTally(encoder, record->object->cl.index);
+        distribs.classDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
     }
 
@@ -157,13 +153,13 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
             }
         }
 
-        for(auto & field : object->cl.fields)
+        for(auto field : object->cl->fields)
 		{
-            int offset = object->stateOffset + field.offset;
+            int offset = object->stateOffset + field->dataOffset;
             int value = reinterpret_cast<const int &>(state[offset]);
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-			distribs.intFieldDists[field.distIndex].EncodeAndTally(encoder, value, prevValues, predictors, sampleCount);
+			distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, value, prevValues, predictors, sampleCount);
 		}
 	}
 

@@ -1,7 +1,7 @@
 #ifndef NETCODE_SERVER_H
 #define NETCODE_SERVER_H
 
-#include "Policy.h"
+#include "Protocol.h"
 
 #include <map>
 
@@ -10,7 +10,7 @@ struct NCobject;
 
 struct NCserver
 {
-	netcode::Policy policy;
+	NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
 	std::vector<NCobject *> objects;
     std::vector<NCpeer *> peers;
@@ -19,7 +19,7 @@ struct NCserver
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
-	NCserver(NCclass * const * classes, size_t numClasses, int maxFrameDelta);
+	NCserver(NCprotocol * protocol);
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -59,12 +59,12 @@ struct NCpeer
 struct NCobject
 {
     NCserver * server;
-    const netcode::Policy::Class & cl;
+    NCclass * cl;
 	int stateOffset;
 
-	NCobject(NCserver * server, const netcode::Policy::Class & cl, int stateOffset);
+	NCobject(NCserver * server, NCclass * cl, int stateOffset);
 
-    void SetIntField(int index, int value);
+    void SetIntField(NCint * field, int value);
 };
 
 #endif

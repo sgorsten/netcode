@@ -5,32 +5,35 @@
 extern "C" {
 #endif
 
-void const *      ncGetBlobData     (struct NCblob * blob);
-int               ncGetBlobSize     (struct NCblob * blob);
-void              ncFreeBlob        (struct NCblob * blob);
+void const *        ncGetBlobData     (struct NCblob * blob);
+int                 ncGetBlobSize     (struct NCblob * blob);
+void                ncFreeBlob        (struct NCblob * blob);
       
-struct NCclass *  ncCreateClass     (int numIntFields);
-struct NCserver * ncCreateServer    (struct NCclass * const * classes, int numClasses, int maxFrameDelta);
-struct NCclient * ncCreateClient    (struct NCclass * const * classes, int numClasses, int maxFrameDelta);
+struct NCprotocol * ncCreateProtocol  (int maxFrameDelta);
+struct NCclass *    ncCreateClass     (struct NCprotocol * protocol);
+struct NCint *      ncCreateInt       (struct NCclass * cl);
 
-struct NCpeer *   ncCreatePeer      (struct NCserver * server);
-struct NCobject * ncCreateObject    (struct NCserver * server, struct NCclass * objectClass);
-void              ncPublishFrame    (struct NCserver * server);
+struct NCserver *   ncCreateServer    (struct NCprotocol * protocol);
+struct NCclient *   ncCreateClient    (struct NCprotocol * protocol);
 
-void              ncSetVisibility   (struct NCpeer * peer, struct NCobject * object, int isVisible);
-struct NCblob *   ncProduceUpdate   (struct NCpeer * peer);
-void              ncConsumeResponse (struct NCpeer * peer, void const * data, int size);
+struct NCpeer *     ncCreatePeer      (struct NCserver * server);
+struct NCobject *   ncCreateObject    (struct NCserver * server, struct NCclass * cl);
+void                ncPublishFrame    (struct NCserver * server);
 
-void              ncSetObjectInt    (struct NCobject * object, int index, int value);
-void              ncDestroyObject   (struct NCobject * object);
+void                ncSetVisibility   (struct NCpeer * peer, struct NCobject * object, int isVisible);
+struct NCblob *     ncProduceUpdate   (struct NCpeer * peer);
+void                ncConsumeResponse (struct NCpeer * peer, void const * data, int size);
 
-void              ncConsumeUpdate   (struct NCclient * client, void const * data, int size);
-struct NCblob *   ncProduceResponse (struct NCclient * client);
-int               ncGetViewCount    (struct NCclient * client);
-struct NCview *   ncGetView         (struct NCclient * client, int index);
+void                ncSetObjectInt    (struct NCobject * object, struct NCint * field, int value);
+void                ncDestroyObject   (struct NCobject * object);
 
-struct NCclass *  ncGetViewClass    (struct NCview * view);
-int               ncGetViewInt      (struct NCview * view, int index);
+void                ncConsumeUpdate   (struct NCclient * client, void const * data, int size);
+struct NCblob *     ncProduceResponse (struct NCclient * client);
+int                 ncGetViewCount    (struct NCclient * client);
+struct NCview *     ncGetView         (struct NCclient * client, int index);
+
+struct NCclass *    ncGetViewClass    (struct NCview * view);
+int                 ncGetViewInt      (struct NCview * view, struct NCint * field);
 
 #ifdef __cplusplus
 }

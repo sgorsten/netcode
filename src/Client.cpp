@@ -4,22 +4,23 @@
 
 using namespace netcode;
 
-NCview::NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
+NCview::NCview(NCclient * client, NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
 }
 
 NCview::~NCview()
 {
-    client->stateAlloc.Free(stateOffset, cl.sizeBytes);
+    client->stateAlloc.Free(stateOffset, cl->sizeInBytes);
 }
 
-int NCview::GetIntField(int index) const
+int NCview::GetIntField(NCint * field) const
 { 
-    return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + cl.fields[index].offset]); 
+    if(field->cl != cl) return 0;
+    return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + field->dataOffset]); 
 }
 
-NCclient::NCclient(NCclass * const classes[], size_t numClasses, int maxFrameDelta) : policy(classes, numClasses, maxFrameDelta)
+NCclient::NCclient(NCprotocol * protocol) : protocol(protocol)
 {
 
 }
@@ -36,8 +37,8 @@ std::shared_ptr<NCview> NCclient::CreateView(size_t classIndex, int uniqueId, in
         }        
     }
 
-    auto & cl = policy.classes[classIndex];
-    auto ptr = std::make_shared<NCview>(this, cl, (int)stateAlloc.Allocate(cl.sizeBytes), frameAdded);
+    auto cl = protocol->classes[classIndex];
+    auto ptr = std::make_shared<NCview>(this, cl, (int)stateAlloc.Allocate(cl->sizeInBytes), frameAdded);
     id2View[uniqueId] = ptr;
     return ptr;
 }
@@ -57,7 +58,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	ArithmeticDecoder decoder(bytes);
     for(int i=0; i<4; ++i)
     {
-        prevFrames[i] = DecodeUniform(decoder, policy.maxFrameDelta+1);
+        prevFrames[i] = DecodeUniform(decoder, protocol->maxFrameDelta+1);
         if(prevFrames[i]) prevFrames[i] = frame - prevFrames[i];
         prevStates[i] = GetFrameState(prevFrames[i]);
         if(prevFrames[i] != 0 && prevStates[i] == nullptr) return; // Malformed packet
@@ -76,7 +77,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
         distribs = frames[prevFrames[0]].distribs;
         views = frames[prevFrames[0]].views;
     }
-    else distribs = Distribs(policy);
+    else distribs = Distribs(*protocol);
 
     // Decode indices of deleted objects
     int delObjects = distribs.delObjectCountDist.DecodeAndTally(decoder);
@@ -112,17 +113,17 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             }
         }
 
-		for (auto & field : view->cl.fields)
+		for (auto field : view->cl->fields)
 		{
-            int offset = view->stateOffset + field.offset;
+            int offset = view->stateOffset + field->dataOffset;
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
+            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
 		}
 	}
 
     // Server will never again refer to frames before this point
-    frames.erase(begin(frames), frames.lower_bound(std::min(frame - policy.maxFrameDelta, prevFrames[3])));
+    frames.erase(begin(frames), frames.lower_bound(std::min(frame - protocol->maxFrameDelta, prevFrames[3])));
     for(auto it = id2View.begin(); it != end(id2View); )
     {
         if(it->second.expired()) it = id2View.erase(it);

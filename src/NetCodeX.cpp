@@ -32,10 +32,9 @@ namespace netcode
     static size_t MemUsage(const IntegerDistribution & d) { return 0; }
     static size_t MemUsage(const FieldDistribution & d) { return MemUsage(d.dists); }
     static size_t MemUsage(const Distribs & d) { return MemUsage(d.intFieldDists); }
-    static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass); }
-    static size_t MemUsage(const Policy::Field & f) { return 0; }
-    static size_t MemUsage(const Policy::Class & cl) { return MemUsage(cl.cl) + MemUsage(cl.fields); }
-    static size_t MemUsage(const Policy & policy) { return MemUsage(policy.classes); }
+    static size_t MemUsage(const NCint * f) { return sizeof(NCint); }
+    static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->fields); }
+    static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->classes); }
     static size_t MemUsage(const NCobject * obj) { return sizeof(NCobject); }
     static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs); }
     static size_t MemUsage(const NCview * peer) { return sizeof(NCview); }
@@ -46,12 +45,12 @@ using namespace netcode;
 
 int ncxServerMemoryUsage(NCserver * server)
 {
-    return sizeof(NCserver) + MemUsage(server->policy) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
+    return sizeof(NCserver) + MemUsage(server->protocol) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
 }
 
 int ncxClientMemoryUsage(NCclient * client)
 {
-    return sizeof(NCclient) + MemUsage(client->policy) + MemUsage(client->frames);
+    return sizeof(NCclient) + MemUsage(client->protocol) + MemUsage(client->frames);
 }
 
 void ncxPrintClientCodeEfficiency (struct NCclient * client)
@@ -65,7 +64,7 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
 
     float headerCost = 0;
     headerCost += sizeof(int32_t)*8.0f;
-    headerCost += log(client->policy.maxFrameDelta+1) * 4;
+    headerCost += log(client->protocol->maxFrameDelta+1) * 4;
     headerCost += distribs.newObjectCountDist.GetExpectedCost();
     headerCost += newUnitCost * avgNewUnits;
     headerCost += distribs.delObjectCountDist.GetExpectedCost();
@@ -74,7 +73,7 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
 
     printf("update header: %f bits\n", headerCost);
     printf("  frame counter:        %f bits\n", sizeof(int32_t)*8.0f);
-    printf("  prev frame deltas:    %f bits\n", log(client->policy.maxFrameDelta+1) * 4);
+    printf("  prev frame deltas:    %f bits\n", log(client->protocol->maxFrameDelta+1) * 4);
     printf("  new object count:     %f bits\n", distribs.newObjectCountDist.GetExpectedCost());
     printf("  new objects:          %f bits\n", newUnitCost * avgNewUnits);
     printf("    # per frame:        %f objects\n", avgNewUnits);
@@ -85,14 +84,14 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
     printf("    # per frame:        %f objects\n", distribs.delObjectCountDist.GetAverageValue());
     printf("    object index:       ??? bits\n\n");
 
-    const auto & classes = client->policy.classes;
+    const auto & classes = client->protocol->classes;
     for(int i=0; i<classes.size(); ++i)
     {
         printf("class %d:\n", i);
         float totalCost = 0;
-        for(int j=0; j<classes[i].fields.size(); ++j)
+        for(int j=0; j<classes[i]->fields.size(); ++j)
         {
-            auto & dist = distribs.intFieldDists[classes[i].fields[j].distIndex];
+            auto & dist = distribs.intFieldDists[classes[i]->fields[j]->uniqueId];
             int best = dist.GetBestDistribution(4);
             float cost = dist.dists[best].GetExpectedCost();
             printf("  field %d: %f bits ", j, cost);

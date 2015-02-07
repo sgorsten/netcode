@@ -1,7 +1,7 @@
 #ifndef NETCODE_CLIENT_H
 #define NETCODE_CLIENT_H
 
-#include "Policy.h"
+#include "Protocol.h"
 
 #include <memory>
 #include <map>
@@ -20,12 +20,12 @@ namespace netcode
 
 struct NCclient
 {
-    netcode::Policy policy;
+    NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
     std::map<int, netcode::ClientFrame> frames;
     std::map<int, std::weak_ptr<NCview>> id2View;
 
-	NCclient(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
+	NCclient(NCprotocol * protocol);
 
     std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded);
 
@@ -43,14 +43,14 @@ struct NCclient
 struct NCview
 {
     NCclient * client;
-    const netcode::Policy::Class & cl;
+    NCclass * cl;
     int frameAdded, stateOffset;
 
-	NCview(NCclient * client, const netcode::Policy::Class & cl, int stateOffset, int frameAdded);
+	NCview(NCclient * client, NCclass * cl, int stateOffset, int frameAdded);
     ~NCview();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
-    int GetIntField(int index) const;
+    int GetIntField(NCint * field) const;
 };
 
 #endif
