@@ -2,29 +2,23 @@
 
 using namespace netcode;
 
-NCobject::NCobject(NCserver * server, const NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
-{
-    
-}
-
-void NCobject::SetIntField(const NCint * field, int value)
-{ 
-    if(field->cl != cl) return;
-    reinterpret_cast<int &>(server->state[stateOffset + field->dataOffset]) = value; 
-}
-
-void NCobject::Destroy()
-{
-    server->stateAlloc.Free(stateOffset, cl->sizeInBytes);
-    for(auto peer : server->peers) peer->SetVisibility(this, false);
-    auto it = std::find(begin(server->objects), end(server->objects), this);
-    if(it != end(server->objects)) server->objects.erase(it);
-    delete this;
-}
-
 NCserver::NCserver(const NCprotocol * protocol) : protocol(protocol), frame()
 {
 
+}
+
+NCserver::~NCserver()
+{
+    // If there are any outstanding peers, remove any references they have to objects or to the server
+    for(auto peer : peers)
+    {
+        peer->visChanges.clear();
+        peer->records.clear();
+        peer->server = nullptr;
+    }
+
+    // If there are any outstanding objects, remove their reference to the server
+    for(auto object : objects) object->server = nullptr;
 }
 
 NCpeer * NCserver::CreatePeer()
@@ -60,13 +54,28 @@ void NCserver::PublishFrame()
     frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - protocol->maxFrameDelta, oldestAck)));
 }
 
+////////////
+// NCpeer //
+////////////
+
 NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
 {
 
 }
 
+NCpeer::~NCpeer()
+{
+    if(server)
+    {
+        auto it = std::find(begin(server->peers), end(server->peers), this);
+        if(it != end(server->peers)) server->peers.erase(it);
+    }
+}
+
 void NCpeer::OnPublishFrame(int frame)
 {
+    if(!server) return;
+
     for(auto change : visChanges)
     {
         auto it = std::find_if(begin(records), end(records), [=](ObjectRecord & r) { return r.object == change.first && r.IsLive(frame); });
@@ -83,11 +92,13 @@ void NCpeer::OnPublishFrame(int frame)
 
 void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 {
+    if(!server) return;
     visChanges.push_back({object,setVisible});
 }
 
 std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
+    if(!server) return {};
     int32_t frame = server->frame, cutoff = frame - server->protocol->maxFrameDelta;
     int32_t prevFrames[4];
     for(size_t i=0; i<4; ++i)
@@ -178,6 +189,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
 void NCpeer::ConsumeResponse(const uint8_t * data, size_t size) 
 {
+    if(!server) return;
     std::vector<int> newAck;
     while(size >= 4)
     {
@@ -189,4 +201,30 @@ void NCpeer::ConsumeResponse(const uint8_t * data, size_t size)
     }
     if(newAck.empty()) return;
     if(ackFrames.empty() || ackFrames.front() < newAck.front()) ackFrames = newAck;
+}
+
+//////////////
+// NCobject //
+//////////////
+
+NCobject::NCobject(NCserver * server, const NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
+{
+    
+}
+
+NCobject::~NCobject()
+{
+    if(server)
+    {
+        server->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+        for(auto peer : server->peers) peer->SetVisibility(this, false);
+        auto it = std::find(begin(server->objects), end(server->objects), this);
+        if(it != end(server->objects)) server->objects.erase(it);
+    }
+}
+
+void NCobject::SetIntField(const NCint * field, int value)
+{ 
+    if(!server || field->cl != cl) return;
+    reinterpret_cast<int &>(server->state[stateOffset + field->dataOffset]) = value; 
 }

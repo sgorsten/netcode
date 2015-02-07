@@ -17,6 +17,7 @@ struct NCserver
     int frame;
 
 	NCserver(const NCprotocol * protocol);
+    ~NCserver();
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -45,6 +46,7 @@ struct NCpeer
     int nextId;
 
     NCpeer(NCserver * server);
+    ~NCpeer();
 
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
@@ -60,9 +62,9 @@ struct NCobject
 	int stateOffset;
 
 	NCobject(NCserver * server, const NCclass * cl, int stateOffset);
+    ~NCobject();
 
     void SetIntField(const NCint * field, int value);
-    void Destroy();
 };
 
 #endif
