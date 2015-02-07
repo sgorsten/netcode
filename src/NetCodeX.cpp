@@ -60,14 +60,28 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
     if(it == client->frames.rend()) return;
     const auto & distribs = it->second.distribs;
 
-    printf("update header:\n");
-    printf("  new object count: %f bits\n", distribs.newObjectCountDist.GetExpectedCost());
-    printf("  deleted object count: %f bits\n\n", distribs.delObjectCountDist.GetExpectedCost());
+    float idCost = distribs.uniqueIdDist.GetExpectedCost(), classCost = distribs.classDist.GetExpectedCost(), newUnitCost = idCost + classCost;
+    double avgNewUnits = distribs.newObjectCountDist.GetAverageValue();
 
-    printf("new object:\n");
-    printf("  unique id: %f bits\n", distribs.uniqueIdDist.GetExpectedCost());
-    printf("  class index: %f bits\n", distribs.classDist.GetExpectedCost());
-    printf("  total: %f bits per object\n\n", distribs.uniqueIdDist.GetExpectedCost() + distribs.classDist.GetExpectedCost());
+    float headerCost = 0;
+    headerCost += sizeof(int32_t)*8.0f;
+    headerCost += log(client->policy.maxFrameDelta+1) * 4;
+    headerCost += distribs.newObjectCountDist.GetExpectedCost();
+    headerCost += newUnitCost * avgNewUnits;
+    headerCost += distribs.delObjectCountDist.GetExpectedCost();
+
+    printf("update header: %f bits\n", headerCost);
+    printf("  frame counter:        %f bits\n", sizeof(int32_t)*8.0f);
+    printf("  prev frame deltas:    %f bits\n", log(client->policy.maxFrameDelta+1) * 4);
+    printf("  new object count:     %f bits\n", distribs.newObjectCountDist.GetExpectedCost());
+    printf("  new objects:          %f bits\n", newUnitCost * avgNewUnits);
+    printf("    # per frame:        %f objects\n", avgNewUnits);
+    printf("    unique id:          %f bits per object\n", idCost);
+    printf("    class index:        %f bits per object\n", classCost);
+    printf("  deleted object count: %f bits\n", distribs.delObjectCountDist.GetExpectedCost());
+    printf("  deleted units:        ??? bits\n");
+    printf("    # per frame:        %f objects\n", distribs.delObjectCountDist.GetAverageValue());
+    printf("    object index:       ??? bits\n");
 
     const auto & classes = client->policy.classes;
     for(int i=0; i<classes.size(); ++i)
@@ -79,7 +93,7 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
             auto & dist = distribs.intFieldDists[classes[i].fields[j].distIndex];
             int best = dist.GetBestDistribution(4);
             float cost = dist.dists[best].GetExpectedCost();
-            printf("  field %d: %f bits", j, cost);
+            printf("  field %d: %f bits ", j, cost);
             switch(best)
             {
             case 0: printf("(zero predictor)\n"); break;

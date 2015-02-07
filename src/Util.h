@@ -20,6 +20,7 @@ namespace netcode
         SymbolDistribution() {}
         SymbolDistribution(size_t symbols);
 
+        float GetTrueProbability(size_t symbol) const;
         float GetProbability(size_t symbol) const;
         float GetExpectedCost() const;
 
@@ -34,6 +35,7 @@ namespace netcode
     public:
 	    IntegerDistribution();
 
+        double GetAverageValue() const;
         float GetExpectedCost() const;
 
         void Tally(int value);

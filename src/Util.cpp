@@ -21,6 +21,18 @@ namespace netcode
 
     }
 
+    float SymbolDistribution::GetTrueProbability(size_t symbol) const
+    {
+        assert(symbol < counts.size());
+
+        code_t a = 0;
+	    for (size_t i = 0; i < symbol; ++i) a += counts[i]-1;
+	    code_t b = a + counts[symbol]-1, d = b;
+	    for (size_t i = symbol + 1; i < counts.size(); ++i) d += counts[i]-1;
+
+	    return float(b-a) / d;    
+    }
+
     float SymbolDistribution::GetProbability(size_t symbol) const
     {
         assert(symbol < counts.size());
@@ -98,16 +110,38 @@ namespace netcode
 
     }
 
+    double IntegerDistribution::GetAverageValue() const
+    {
+        double totalValue=0, totalWeight=0;
+        for(int bits=0; bits<32; ++bits)
+        {
+            int minValue = bits > 0 ? 0 | (1 << (bits-1)) : 0;
+            int maxValue = bits > 0 ? ((1 << (bits-1))-1) | (1 << (bits-1)) : 0;
+            double bucketAvgValue = ((double)minValue + (double)maxValue) / 2;
+            float p = dist.GetTrueProbability(bits);
+            totalValue += bucketAvgValue * p;
+            totalWeight += p;
+
+            minValue = ~minValue;
+            maxValue = ~maxValue;
+            bucketAvgValue = ((double)minValue + (double)maxValue) / 2;
+            p = dist.GetTrueProbability(bits + 32);
+            totalValue += bucketAvgValue * p;
+            totalWeight += p;
+        }
+        return totalValue / totalWeight;
+    }
+
     float IntegerDistribution::GetExpectedCost() const
     {
         float cost = 0;
         for(int bits=0; bits<32; ++bits)
         {
             float p = dist.GetProbability(bits);
-            cost += p * (-log(p) + bits);
+            cost += p * (-log(p) + std::max(bits-1,0));
 
             p = dist.GetProbability(bits + 32);
-            cost += p * (-log(p) + bits);
+            cost += p * (-log(p) + std::max(bits-1,0));
         }
         return cost;
     }
@@ -124,18 +158,16 @@ namespace netcode
 	    int bits = CountSignificantBits(value);
         int bucket = bits + (value < 0 ? 32 : 0);
         dist.EncodeAndTally(encoder, bucket);
-
-        value &= ~(-1U << bits); // remove the upper bits of the integer (all those which match the sign bit)
-	    EncodeUniform(encoder, value, 1 << bits); // encode the lower bits of the integer
+        if(value < 0) value = ~value; // number will either be 0 or 0* 1 (0|1)*
+        if(bits > 0) EncodeUniform(encoder, value & ~(1 << (bits-1)), 1 << (bits-1)); // encode the bits below the most significant bit
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
         int bucket = dist.DecodeAndTally(decoder);
         int bits = (bucket & 0x1F);
-        int value = DecodeUniform(decoder, 1 << bits); // decode the lower bits of the integer
-        if(bucket & 0x20) value |= (-1U << bits); // regenerate the upper bits from the bucket sign
-	    return value;
+        int value = bits > 0 ? DecodeUniform(decoder, 1 << (bits-1)) | (1 << (bits-1)) : 0; // decode the bits below the most significant bit
+        return bucket & 0x20 ? ~value : value; // restore sign if this number belonged to a negative bucket
     }
 
     RangeAllocator::RangeAllocator() : totalCapacity()
