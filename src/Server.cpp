@@ -2,18 +2,27 @@
 
 using namespace netcode;
 
-NCobject::NCobject(NCserver * server, NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
+NCobject::NCobject(NCserver * server, const NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
 }
 
-void NCobject::SetIntField(NCint * field, int value)
+void NCobject::SetIntField(const NCint * field, int value)
 { 
     if(field->cl != cl) return;
     reinterpret_cast<int &>(server->state[stateOffset + field->dataOffset]) = value; 
 }
 
-NCserver::NCserver(NCprotocol * protocol) : protocol(protocol), frame()
+void NCobject::Destroy()
+{
+    server->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+    for(auto peer : server->peers) peer->SetVisibility(this, false);
+    auto it = std::find(begin(server->objects), end(server->objects), this);
+    if(it != end(server->objects)) server->objects.erase(it);
+    delete this;
+}
+
+NCserver::NCserver(const NCprotocol * protocol) : protocol(protocol), frame()
 {
 
 }
@@ -25,7 +34,7 @@ NCpeer * NCserver::CreatePeer()
 	return peer;    
 }
 
-NCobject * NCserver::CreateObject(NCclass * cl)
+NCobject * NCserver::CreateObject(const NCclass * cl)
 {
     if(cl->protocol != protocol) return nullptr;
 

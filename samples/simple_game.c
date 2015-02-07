@@ -6,22 +6,22 @@
 #include <math.h>
 
 /* Protocol data */
-struct NCprotocol * protocol;
-struct NCclass * unitClass;
-struct NCint * teamField, * hpField, * xField, * yField;
+NCprotocol * protocol;
+NCclass * unitClass;
+NCint * teamField, * hpField, * xField, * yField;
 
 /* Server state */
 struct Unit
 {
     int team, hp;
     float x, y;
-    struct NCobject * object;
+    NCobject * object;
 } units[20];
-struct NCserver * server;
-struct NCpeer * peer;
+NCserver * server;
+NCpeer * peer;
 
 /* Client state */
-struct NCclient * client;
+NCclient * client;
 GLFWwindow * win;
 
 void error(const char * message)
@@ -42,7 +42,7 @@ void spawn_unit(int i)
 int main(int argc, char * argv[])
 {
     int i, j, n, x, y, h; double a, t0, t1, timestep; 
-    struct NCblob * updateBlob, * responseBlob; struct NCview * view;
+    NCblob * updateBlob, * responseBlob; NCview * view;
 
     /* init protocol */
     protocol = ncCreateProtocol(30);

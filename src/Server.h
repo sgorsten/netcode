@@ -10,7 +10,7 @@ struct NCobject;
 
 struct NCserver
 {
-	NCprotocol * protocol;
+	const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
 	std::vector<NCobject *> objects;
     std::vector<NCpeer *> peers;
@@ -19,7 +19,7 @@ struct NCserver
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
-	NCserver(NCprotocol * protocol);
+	NCserver(const NCprotocol * protocol);
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -28,7 +28,7 @@ struct NCserver
     }
 
     NCpeer * CreatePeer();
-	NCobject * CreateObject(NCclass * objectClass);
+	NCobject * CreateObject(const NCclass * objectClass);
     void PublishFrame();
 };
 
@@ -59,12 +59,13 @@ struct NCpeer
 struct NCobject
 {
     NCserver * server;
-    NCclass * cl;
+    const NCclass * cl;
 	int stateOffset;
 
-	NCobject(NCserver * server, NCclass * cl, int stateOffset);
+	NCobject(NCserver * server, const NCclass * cl, int stateOffset);
 
-    void SetIntField(NCint * field, int value);
+    void SetIntField(const NCint * field, int value);
+    void Destroy();
 };
 
 #endif

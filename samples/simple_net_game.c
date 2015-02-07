@@ -13,10 +13,10 @@
 void error(const char * message);
 
 /* protocol */
-struct NCprotocol * protocol;
-struct NCclass * teamClass, * unitClass;
-struct NCint * teamId;
-struct NCint * unitTeamId, * unitHp, * unitX, * unitY;
+NCprotocol * protocol;
+NCclass * teamClass, * unitClass;
+NCint * teamId;
+NCint * unitTeamId, * unitHp, * unitX, * unitY;
 
 struct Server * CreateServer(int port);
 void UpdateServer(struct Server * s, float timestep);
@@ -89,20 +89,20 @@ struct Unit
 {
     int team, hp;
     float x, y;
-    struct NCobject * nobj;
+    NCobject * nobj;
 };
 
 struct Peer
 {
     SOCKADDR_IN addr;
-    struct NCpeer * npeer;
+    NCpeer * npeer;
 };
 
 struct Server
 {
     struct Unit units[20];
-    struct NCserver * nserver;
-    struct NCobject * nteams[2];
+    NCserver * nserver;
+    NCobject * nteams[2];
 
     SOCKET serverSocket;
     struct Peer peers[MAX_PEERS];
@@ -262,7 +262,7 @@ void UpdateServer(struct Server * s, float timestep)
     /* send updates to peers */
     for(j=0; j<s->numPeers; ++j) 
     {
-        struct NCblob * nupdate = ncProduceUpdate(s->peers[j].npeer);
+        NCblob * nupdate = ncProduceUpdate(s->peers[j].npeer);
         sendto(s->serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&s->peers[j].addr, sizeof(s->peers[j].addr));
         ncFreeBlob(nupdate);
     }
@@ -276,7 +276,7 @@ struct Client
 {
     SOCKET clientSocket;
     SOCKADDR_IN serverAddr;
-    struct NCclient * nclient;
+    NCclient * nclient;
     GLFWwindow * win;
     int team;
 };
@@ -350,13 +350,13 @@ void UpdateClient(struct Client * c)
         ncConsumeUpdate(c->nclient, buffer, len);
     }
 
-    struct NCblob * nresponse = ncProduceResponse(c->nclient);
+    NCblob * nresponse = ncProduceResponse(c->nclient);
     sendto(c->clientSocket, (const char *)ncGetBlobData(nresponse), ncGetBlobSize(nresponse), 0, (const SOCKADDR *)&c->serverAddr, sizeof(c->serverAddr));
 
     /* determine team */
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        struct NCview * nview = ncGetView(c->nclient, i);
+        NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == teamClass) c->team = ncGetViewInt(nview, teamId);
     }
 
@@ -369,7 +369,7 @@ void UpdateClient(struct Client * c)
     glColor3f(0.5f,0.3f,0.1f);
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        struct NCview * nview = ncGetView(c->nclient, i);
+        NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == unitClass && ncGetViewInt(nview, unitTeamId) == c->team)
         {
             DrawCircle(ncGetViewInt(nview, unitX), ncGetViewInt(nview, unitY), 120);
@@ -379,7 +379,7 @@ void UpdateClient(struct Client * c)
     /* draw units */
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        struct NCview * nview = ncGetView(c->nclient, i);
+        NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == unitClass)
         {
             /* draw colored circle to represent unit */

@@ -4,7 +4,7 @@
 
 using namespace netcode;
 
-NCview::NCview(NCclient * client, NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
+NCview::NCview(NCclient * client, const NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
 }
@@ -14,13 +14,13 @@ NCview::~NCview()
     client->stateAlloc.Free(stateOffset, cl->sizeInBytes);
 }
 
-int NCview::GetIntField(NCint * field) const
+int NCview::GetIntField(const NCint * field) const
 { 
     if(field->cl != cl) return 0;
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + field->dataOffset]); 
 }
 
-NCclient::NCclient(NCprotocol * protocol) : protocol(protocol)
+NCclient::NCclient(const NCprotocol * protocol) : protocol(protocol)
 {
 
 }
@@ -131,7 +131,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     }
 }
 
-std::vector<uint8_t> NCclient::ProduceResponse()
+std::vector<uint8_t> NCclient::ProduceResponse() const
 {
     std::vector<uint8_t> buffer;
     for(auto it = frames.rbegin(); it != frames.rend(); ++it)

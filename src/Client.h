@@ -20,12 +20,12 @@ namespace netcode
 
 struct NCclient
 {
-    NCprotocol * protocol;
+    const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
     std::map<int, netcode::ClientFrame> frames;
     std::map<int, std::weak_ptr<NCview>> id2View;
 
-	NCclient(NCprotocol * protocol);
+	NCclient(const NCprotocol * protocol);
 
     std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded);
 
@@ -37,20 +37,20 @@ struct NCclient
     }
 
 	void ConsumeUpdate(const uint8_t * buffer, size_t bufferSize);
-    std::vector<uint8_t> ProduceResponse();
+    std::vector<uint8_t> ProduceResponse() const;
 };
 
 struct NCview
 {
     NCclient * client;
-    NCclass * cl;
+    const NCclass * cl;
     int frameAdded, stateOffset;
 
-	NCview(NCclient * client, NCclass * cl, int stateOffset, int frameAdded);
+	NCview(NCclient * client, const NCclass * cl, int stateOffset, int frameAdded);
     ~NCview();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
-    int GetIntField(NCint * field) const;
+    int GetIntField(const NCint * field) const;
 };
 
 #endif
