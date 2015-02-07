@@ -1,7 +1,8 @@
 #include "Util.h"
-
 #include <iostream>
 #include <random>
+
+using namespace netcode;
 
 void TestRanges();
 void TestIntegerCoding();

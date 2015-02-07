@@ -93,7 +93,7 @@ namespace netcode
 	    return 32;
     }
 
-    IntegerDistribution::IntegerDistribution() : dist(32)
+    IntegerDistribution::IntegerDistribution() : dist(64)
     { 
 
     }
@@ -105,6 +105,9 @@ namespace netcode
         {
             float p = dist.GetProbability(bits-1);
             cost += p * (-log(p) + bits);
+
+            p = dist.GetProbability(bits-1 + 32);
+            cost += p * (-log(p) + bits);
         }
         return cost;
     }
@@ -112,23 +115,22 @@ namespace netcode
     void IntegerDistribution::Tally(int value)
     {
         int bits = CountSignificantBits(value);
-        dist.Tally(bits-1);
+        int bucket = bits-1 + (value < 0 ? 32 : 0);
+        dist.Tally(bucket);
     }
 
     void IntegerDistribution::EncodeAndTally(ArithmeticEncoder & encoder, int value)
     {
 	    int bits = CountSignificantBits(value);
-        dist.EncodeAndTally(encoder, bits-1);
-        if(bits == 1)
-        {
-            int x = 5;
-        }
+        int bucket = bits-1 + (value < 0 ? 32 : 0);
+        dist.EncodeAndTally(encoder, bucket);
 	    EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
-        int bits = 1+dist.DecodeAndTally(decoder);
+        int bucket = dist.DecodeAndTally(decoder);
+        int bits = (bucket & 0x1F) + 1;
 	    return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
     }
 
