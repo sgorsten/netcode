@@ -1,5 +1,5 @@
-#ifndef POLICY_H
-#define POLICY_H
+#ifndef NETCODE_POLICY_H
+#define NETCODE_POLICY_H
 
 #include "Util.h"
 
@@ -13,32 +13,35 @@ struct NCclass
 	int numIntFields;
 };
 
-struct Policy
+namespace netcode
 {
-    struct Field { int offset, distIndex; };
-
-    struct Class
+    struct Policy
     {
-        NCclass * cl;
-        int index, sizeBytes;
-        std::vector<Field> fields;
+        struct Field { int offset, distIndex; };
+
+        struct Class
+        {
+            NCclass * cl;
+            int index, sizeBytes;
+            std::vector<Field> fields;
+        };
+
+        std::vector<Class> classes;
+        size_t numIntFields;
+        int maxFrameDelta;
+
+        Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
     };
 
-    std::vector<Class> classes;
-    size_t numIntFields;
-    int maxFrameDelta;
+    struct Distribs
+    {
+        std::vector<FieldDistribution> intFieldDists;
+	    IntegerDistribution newObjectCountDist, delObjectCountDist, uniqueIdDist;
+        SymbolDistribution classDist;
 
-    Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
-};
-
-struct Distribs
-{
-    std::vector<FieldDistribution> intFieldDists;
-	IntegerDistribution newObjectCountDist, delObjectCountDist, uniqueIdDist;
-    SymbolDistribution classDist;
-
-    Distribs() {}
-    Distribs(const Policy & policy) : intFieldDists(policy.numIntFields), classDist(policy.classes.size()) {}
-};
+        Distribs() {}
+        Distribs(const Policy & policy) : intFieldDists(policy.numIntFields), classDist(policy.classes.size()) {}
+    };
+}
 
 #endif

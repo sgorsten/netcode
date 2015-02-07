@@ -1,5 +1,7 @@
 #include "Server.h"
 
+using namespace netcode;
+
 NCobject::NCobject(NCserver * server, const Policy::Class & cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
 {
     
@@ -100,7 +102,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     memcpy(bytes.data() + 0, &frame, sizeof(int32_t));
 
     // Prepare arithmetic code for this frame
-	arith::Encoder encoder(bytes);
+	ArithmeticEncoder encoder(bytes);
     for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, server->policy.maxFrameDelta+1);
 
     auto & distribs = frameDistribs[frame];

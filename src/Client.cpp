@@ -2,6 +2,8 @@
 
 #include <cassert>
 
+using namespace netcode;
+
 NCview::NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
@@ -40,8 +42,6 @@ std::shared_ptr<NCview> NCclient::CreateView(size_t classIndex, int uniqueId, in
     return ptr;
 }
 
-#include <iostream>
-
 void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
     if(bufferSize < 4) return;
@@ -54,7 +54,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 
     // Prepare arithmetic code for this frame
 	std::vector<uint8_t> bytes(buffer + 4, buffer + bufferSize);
-	arith::Decoder decoder(bytes);
+	ArithmeticDecoder decoder(bytes);
     for(int i=0; i<4; ++i)
     {
         prevFrames[i] = DecodeUniform(decoder, policy.maxFrameDelta+1);

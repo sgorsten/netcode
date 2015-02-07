@@ -33,7 +33,7 @@ void TestIntegerCoding()
 void CompressFrame(const int * values, size_t numValues)
 {
 	std::vector<uint8_t> buffer;
-	arith::Encoder encoder(buffer);
+	ArithmeticEncoder encoder(buffer);
 	IntegerDistribution dist1;
 	for (int i = 0; i < numValues; ++i)
 	{
@@ -41,7 +41,7 @@ void CompressFrame(const int * values, size_t numValues)
 	}
 	encoder.Finish();
 
-	arith::Decoder decoder(buffer);
+	ArithmeticDecoder decoder(buffer);
 	IntegerDistribution dist2;
 	for (int i = 0; i < numValues; ++i)
 	{
@@ -73,11 +73,11 @@ void TestRanges()
 	}
 
 	std::vector<uint8_t> buffer;
-	arith::Encoder encoder(buffer);
+	ArithmeticEncoder encoder(buffer);
 	for (auto & range : ranges) encoder.Encode(range.a, range.b, range.d);
 	encoder.Finish();
 
-	arith::Decoder decoder(buffer);
+	ArithmeticDecoder decoder(buffer);
 	for (auto & range : ranges)
 	{
 		uint32_t i = decoder.Decode(range.d);

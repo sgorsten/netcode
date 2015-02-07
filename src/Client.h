@@ -1,5 +1,5 @@
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef NETCODE_CLIENT_H
+#define NETCODE_CLIENT_H
 
 #include "Policy.h"
 
@@ -8,18 +8,21 @@
 
 struct NCview;
 
-struct ClientFrame
+namespace netcode
 {
-    std::vector<std::shared_ptr<NCview>> views;
-    std::vector<uint8_t> state;
-    Distribs distribs;
-};
+    struct ClientFrame
+    {
+        std::vector<std::shared_ptr<NCview>> views;
+        std::vector<uint8_t> state;
+        Distribs distribs;
+    };
+}
 
 struct NCclient
 {
-    Policy policy;
-    RangeAllocator stateAlloc;
-    std::map<int, ClientFrame> frames;
+    netcode::Policy policy;
+    netcode::RangeAllocator stateAlloc;
+    std::map<int, netcode::ClientFrame> frames;
     std::map<int, std::weak_ptr<NCview>> id2View;
 
 	NCclient(NCclass * const classes[], size_t numClasses, int maxFrameDelta);
@@ -40,10 +43,10 @@ struct NCclient
 struct NCview
 {
     NCclient * client;
-    const Policy::Class & cl;
+    const netcode::Policy::Class & cl;
     int frameAdded, stateOffset;
 
-	NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded);
+	NCview(NCclient * client, const netcode::Policy::Class & cl, int stateOffset, int frameAdded);
     ~NCview();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }

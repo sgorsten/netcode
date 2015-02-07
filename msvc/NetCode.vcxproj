@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\netcode.h" />
+    <ClInclude Include="..\include\netcodex.h" />
     <ClInclude Include="..\src\Arith.h" />
     <ClInclude Include="..\src\Client.h" />
     <ClInclude Include="..\src\Policy.h" />
@@ -29,6 +30,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\Arith.cpp" />
     <ClCompile Include="..\src\Client.cpp" />
+    <ClCompile Include="..\src\NetCodeX.cpp" />
     <ClCompile Include="..\src\Util.cpp" />
     <ClCompile Include="..\src\Policy.cpp" />
     <ClCompile Include="..\src\Server.cpp" />

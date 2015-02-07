@@ -318,7 +318,7 @@ void DrawCircle(int x, int y, int radius)
 
 void UpdateClient(struct Client * c)
 {
-    int i, j, n, x, y, h; float a;
+    int i, n, x, y, h;
 
     /* check for incoming data on any sockets */
     struct timeval tv;
