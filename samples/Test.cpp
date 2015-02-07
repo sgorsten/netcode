@@ -6,14 +6,13 @@ using namespace netcode;
 
 void TestRanges();
 void TestIntegerCoding();
+void TestExtremes();
 
 int main(int argc, char * argv[])
 {
-    std::vector<uint8_t> buffer;
-    IntegerDistribution d;
-
 	TestRanges();
 	TestIntegerCoding();
+    TestExtremes();
 }
 
 void CompressFrame(const int * values, size_t numValues);
@@ -93,4 +92,32 @@ void TestRanges()
 		decoder.Confirm(range.a, range.b);
 	}
 	std::cout << "Success!" << std::endl;
+}
+
+void TestExtremeInt(int value)
+{
+    std::vector<uint8_t> buffer;
+    ArithmeticEncoder encoder(buffer);
+    IntegerDistribution d1;
+    d1.EncodeAndTally(encoder, value);
+    encoder.Finish();
+
+    ArithmeticDecoder decoder(buffer);
+    IntegerDistribution d2;
+    int value2 = d2.DecodeAndTally(decoder);
+
+    if(value != value2) std::cerr << "Decoding error for " << value << std::endl;
+    std::cout << "Success!" << std::endl;
+}
+
+void TestExtremes()
+{
+    TestExtremeInt(0);
+    TestExtremeInt(+1);
+    TestExtremeInt(-1);
+    TestExtremeInt(5);
+    TestExtremeInt(-452);
+    TestExtremeInt(1000000000);
+    TestExtremeInt(INT_MAX);
+    TestExtremeInt(INT_MIN);
 }
