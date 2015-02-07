@@ -126,7 +126,7 @@ namespace netcode
         dist.EncodeAndTally(encoder, bucket);
 
         uint32_t val = value;
-        val &= (-1U >> (32 - bits) >> 1); // remove all insignificant bits, and the most significant bit (since sign is known from the bucket index)
+        val &= ~(-1U << (bits-1)); // remove all insignificant bits, and the most significant bit (since sign is known from the bucket index)
 	    EncodeUniform(encoder, val, 1 << (bits-1));
     }
 
@@ -135,8 +135,8 @@ namespace netcode
         int bucket = dist.DecodeAndTally(decoder);
         int bits = (bucket & 0x1F) + 1;
         uint32_t val = DecodeUniform(decoder, 1 << (bits-1));
-        if(bucket & 0x20) val |= 1 << (bits-1); // regenerate the sign bit from the bucket index
-	    return static_cast<int>(val << (32 - bits)) >> (32 - bits); // regenerate insignificant bits by sign-extension
+        if(bucket & 0x20) val |= (-1U << (bits-1)); // regenerate the sign bit from the bucket index
+	    return val;
     }
 
     RangeAllocator::RangeAllocator() : totalCapacity()
