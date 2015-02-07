@@ -221,7 +221,7 @@ namespace netcode
     {
         int bestDist = 0;
         float bestCost = dists[0].GetExpectedCost();
-        for(int i=1; i<sampleCount; ++i)
+        for(int i=1; i<=sampleCount; ++i)
         {
             float cost = dists[i].GetExpectedCost();
             if(cost < bestCost)
@@ -237,14 +237,14 @@ namespace netcode
     {
         int best = GetBestDistribution(sampleCount);
         dists[best].EncodeAndTally(encoder, value - predictors[best](prevValues));
-        for(int i=0; i<sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
+        for(int i=0; i<=sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
     }
 
     int FieldDistribution::DecodeAndTally(ArithmeticDecoder & decoder, const int (&prevValues)[4], const CurvePredictor (&predictors)[5], int sampleCount)
     {
         int best = GetBestDistribution(sampleCount);
         int value = dists[best].DecodeAndTally(decoder) + predictors[best](prevValues);
-        for(int i=0; i<sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
+        for(int i=0; i<=sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
         return value;
     }
 }

@@ -1,4 +1,5 @@
 #include <netcode.h>
+#include <netcodex.h>
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -59,8 +60,7 @@ int main(int argc, char * argv[])
 	t0 = glfwGetTime();
 	while (!glfwWindowShouldClose(win))
 	{
-		glfwPollEvents();
-		t1 = glfwGetTime(), timestep = t1 - t0;
+    	t1 = glfwGetTime(), timestep = t1 - t0;
 		if (timestep < 1.0 / 60) continue;
 		t0 = t1;
 
@@ -169,7 +169,11 @@ int main(int argc, char * argv[])
         }
         glPopMatrix();
 		glfwSwapBuffers(win);
+
+        glfwPollEvents();
 	}
+
+    ncxPrintClientCodeEfficiency(nclient);
 
 	glfwDestroyWindow(win);
 	glfwTerminate();

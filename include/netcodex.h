@@ -5,8 +5,10 @@
 extern "C" {
 #endif
 
-int               ncxServerMemoryUsage (struct NCserver * server);
-int               ncxClientMemoryUsage (struct NCclient * client);
+void ncxPrintClientCodeEfficiency (struct NCclient * client);
+
+int ncxServerMemoryUsage (struct NCserver * server);
+int ncxClientMemoryUsage (struct NCclient * client);
 
 #ifdef __cplusplus
 }

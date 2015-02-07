@@ -53,3 +53,43 @@ int ncxClientMemoryUsage(NCclient * client)
 {
     return sizeof(NCclient) + MemUsage(client->policy) + MemUsage(client->frames);
 }
+
+void ncxPrintClientCodeEfficiency (struct NCclient * client)
+{
+    auto it = client->frames.rbegin();
+    if(it == client->frames.rend()) return;
+    const auto & distribs = it->second.distribs;
+
+    printf("update header:\n");
+    printf("  new object count: %f bits\n", distribs.newObjectCountDist.GetExpectedCost());
+    printf("  deleted object count: %f bits\n\n", distribs.delObjectCountDist.GetExpectedCost());
+
+    printf("new object:\n");
+    printf("  unique id: %f bits\n", distribs.uniqueIdDist.GetExpectedCost());
+    printf("  class index: %f bits\n", distribs.classDist.GetExpectedCost());
+    printf("  total: %f bits per object\n\n", distribs.uniqueIdDist.GetExpectedCost() + distribs.classDist.GetExpectedCost());
+
+    const auto & classes = client->policy.classes;
+    for(int i=0; i<classes.size(); ++i)
+    {
+        printf("class %d:\n", i);
+        float totalCost = 0;
+        for(int j=0; j<classes[i].fields.size(); ++j)
+        {
+            auto & dist = distribs.intFieldDists[classes[i].fields[j].distIndex];
+            int best = dist.GetBestDistribution(4);
+            float cost = dist.dists[best].GetExpectedCost();
+            printf("  field %d: %f bits", j, cost);
+            switch(best)
+            {
+            case 0: printf("(zero predictor)\n"); break;
+            case 1: printf("(constant predictor)\n"); break;
+            case 2: printf("(linear predictor)\n"); break;
+            case 3: printf("(quadratic predictor)\n"); break;
+            case 4: printf("(cubic predictor)\n"); break;
+            }
+            totalCost += cost;
+        }
+        printf("  total: %f bits per object\n\n", totalCost);
+    }
+}
