@@ -1,18 +1,21 @@
 #include "Policy.h"
 
-Policy::Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta) : numIntFields(), maxFrameDelta(maxFrameDelta)
+namespace netcode
 {
-    for(size_t i=0; i<numClasses; ++i)
+    Policy::Policy(NCclass * const classes[], size_t numClasses, int maxFrameDelta) : numIntFields(), maxFrameDelta(maxFrameDelta)
     {
-        Class cl;
-        cl.cl = classes[i];
-        cl.index = i;
-        cl.sizeBytes = 0;
-        for(int fieldIndex = 0; fieldIndex < classes[i]->numIntFields; ++fieldIndex)
+        for(size_t i=0; i<numClasses; ++i)
         {
-            cl.fields.push_back({cl.sizeBytes, numIntFields++});
-            cl.sizeBytes += sizeof(int);
+            Class cl;
+            cl.cl = classes[i];
+            cl.index = i;
+            cl.sizeBytes = 0;
+            for(int fieldIndex = 0; fieldIndex < classes[i]->numIntFields; ++fieldIndex)
+            {
+                cl.fields.push_back({cl.sizeBytes, numIntFields++});
+                cl.sizeBytes += sizeof(int);
+            }
+            this->classes.push_back(cl);
         }
-        this->classes.push_back(cl);
     }
 }

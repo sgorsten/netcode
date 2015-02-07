@@ -1,5 +1,5 @@
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef NETCODE_SERVER_H
+#define NETCODE_SERVER_H
 
 #include "Policy.h"
 
@@ -10,8 +10,8 @@ struct NCobject;
 
 struct NCserver
 {
-	Policy policy;
-    RangeAllocator stateAlloc;
+	netcode::Policy policy;
+    netcode::RangeAllocator stateAlloc;
 	std::vector<NCobject *> objects;
     std::vector<NCpeer *> peers;
 
@@ -43,7 +43,7 @@ struct NCpeer
     NCserver * server;
     std::vector<ObjectRecord> records;
     std::vector<std::pair<const NCobject *,bool>> visChanges;
-    std::map<int, Distribs> frameDistribs;
+    std::map<int, netcode::Distribs> frameDistribs;
     std::vector<int> ackFrames;
     int nextId;
 
@@ -59,10 +59,10 @@ struct NCpeer
 struct NCobject
 {
     NCserver * server;
-    const Policy::Class & cl;
+    const netcode::Policy::Class & cl;
 	int stateOffset;
 
-	NCobject(NCserver * server, const Policy::Class & cl, int stateOffset);
+	NCobject(NCserver * server, const netcode::Policy::Class & cl, int stateOffset);
 
     void SetIntField(int index, int value);
 };

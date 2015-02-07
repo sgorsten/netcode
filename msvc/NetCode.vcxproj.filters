@@ -22,6 +22,7 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\include\netcode.h" />
+    <ClInclude Include="..\include\netcodex.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Policy.cpp">
@@ -40,6 +41,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\NetCode.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\NetCodeX.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

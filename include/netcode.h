@@ -1,5 +1,5 @@
-#ifndef LIB_NETCODE_INCLUDE_GUARD
-#define LIB_NETCODE_INCLUDE_GUARD
+#ifndef NETCODE_LIBRARY_API_INCLUDE_GUARD
+#define NETCODE_LIBRARY_API_INCLUDE_GUARD
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,9 +31,6 @@ struct NCview *   ncGetView         (struct NCclient * client, int index);
 
 struct NCclass *  ncGetViewClass    (struct NCview * view);
 int               ncGetViewInt      (struct NCview * view, int index);
-
-int               ncDebugServerMemoryUsage (struct NCserver * server);
-int               ncDebugClientMemoryUsage (struct NCclient * client);
 
 #ifdef __cplusplus
 }

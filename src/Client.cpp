@@ -2,6 +2,8 @@
 
 #include <cassert>
 
+using namespace netcode;
+
 NCview::NCview(NCclient * client, const Policy::Class & cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
@@ -43,35 +45,36 @@ std::shared_ptr<NCview> NCclient::CreateView(size_t classIndex, int uniqueId, in
 void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
     if(bufferSize < 4) return;
-    int32_t frame, prevFrame, prevPrevFrame;
-    memcpy(&frame, buffer + 0, sizeof(int32_t));
+    int32_t frame, prevFrames[4];
+    const uint8_t * prevStates[4];
 
     // Don't bother decoding messages for old frames (TODO: We may still want to decode these frames if they can improve our ack set)
+    memcpy(&frame, buffer + 0, sizeof(int32_t));
     if(!frames.empty() && frames.rbegin()->first >= frame) return;
 
     // Prepare arithmetic code for this frame
 	std::vector<uint8_t> bytes(buffer + 4, buffer + bufferSize);
-	arith::Decoder decoder(bytes);
-    prevFrame = DecodeUniform(decoder, policy.maxFrameDelta+1);
-    prevPrevFrame = DecodeUniform(decoder, policy.maxFrameDelta+1);
-    if(prevFrame) prevFrame = frame - prevFrame;
-    if(prevPrevFrame) prevPrevFrame = frame - prevPrevFrame;
-    
-    auto prevState = GetFrameState(prevFrame);
-    auto prevPrevState = GetFrameState(prevPrevFrame);
-    if(prevFrame != 0 && prevState == nullptr) return; // Malformed
-    if(prevPrevFrame != 0 && prevPrevState == nullptr) return; // Malformed
+	ArithmeticDecoder decoder(bytes);
+    for(int i=0; i<4; ++i)
+    {
+        prevFrames[i] = DecodeUniform(decoder, policy.maxFrameDelta+1);
+        if(prevFrames[i]) prevFrames[i] = frame - prevFrames[i];
+        prevStates[i] = GetFrameState(prevFrames[i]);
+        if(prevFrames[i] != 0 && prevStates[i] == nullptr) return; // Malformed packet
+    }
 
-    CurvePredictor predictor;
-    if(prevPrevFrame != 0) predictor = MakeLinearPredictor(frame-prevFrame, frame-prevPrevFrame);
-    else if(prevFrame != 0) predictor = MakeConstantPredictor();
+    CurvePredictor predictors[5];
+    predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
+    predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
+    predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
+    predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
 
     auto & distribs = frames[frame].distribs;
     auto & views = frames[frame].views;
-    if(prevFrame != 0)
+    if(prevFrames[0] != 0)
     {
-        distribs = frames[prevFrame].distribs;
-        views = frames[prevFrame].views;
+        distribs = frames[prevFrames[0]].distribs;
+        views = frames[prevFrames[0]].views;
     }
     else distribs = Distribs(policy);
 
@@ -99,17 +102,27 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	// Decode updates for each view
 	for (auto view : views)
 	{
+        int sampleCount = 0;
+        for(int i=4; i>0; --i)
+        {
+            if(view->IsLive(prevFrames[i-1]))
+            {
+                sampleCount = i;
+                break;
+            }
+        }
+
 		for (auto & field : view->cl.fields)
 		{
             int offset = view->stateOffset + field.offset;
-            int prevValue = view->IsLive(prevFrame) ? reinterpret_cast<const int &>(prevState[offset]) : 0;
-            int prevPrevValue = view->IsLive(prevPrevFrame) ? reinterpret_cast<const int &>(prevPrevState[offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = predictor(prevValue, prevPrevValue, 0, 0) + distribs.intFieldDists[field.distIndex].dists[2].DecodeAndTally(decoder);
+            int prevValues[4];
+            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field.distIndex].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
 		}
 	}
 
     // Server will never again refer to frames before this point
-    frames.erase(begin(frames), frames.lower_bound(std::min(frame - policy.maxFrameDelta, prevPrevFrame)));
+    frames.erase(begin(frames), frames.lower_bound(std::min(frame - policy.maxFrameDelta, prevFrames[3])));
     for(auto it = id2View.begin(); it != end(id2View); )
     {
         if(it->second.expired()) it = id2View.erase(it);
@@ -125,7 +138,7 @@ std::vector<uint8_t> NCclient::ProduceResponse()
         auto offset = buffer.size();
         buffer.resize(offset + 4);
         memcpy(buffer.data() + offset, &it->first, sizeof(int32_t));
-        if(buffer.size() == 8) break;
+        if(buffer.size() == 16) break;
     }
     return buffer;
 }
