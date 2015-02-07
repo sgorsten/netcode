@@ -16,6 +16,27 @@ namespace netcode
 	    return x;
     }
 
+    void EncodeBits(ArithmeticEncoder & encoder, code_t value, int n)
+    {
+        if(n > 16)
+        {
+            EncodeBits(encoder, value, 16);
+            EncodeBits(encoder, value>>16, n-16);
+        }
+        else EncodeUniform(encoder, value & ~(-1U << n), 1 << n);
+    }
+
+    code_t DecodeBits(ArithmeticDecoder & decoder, int n)
+    {
+        if(n > 16)
+        {
+            code_t lo = DecodeBits(decoder, 16);
+            code_t hi = DecodeBits(decoder, n-16);
+            return hi << 16 | lo;
+        }
+        return DecodeUniform(decoder, 1 << n);
+    }
+
     SymbolDistribution::SymbolDistribution(size_t symbols) : counts(symbols,1)
     {
 
@@ -159,14 +180,14 @@ namespace netcode
         int bucket = bits + (value < 0 ? 32 : 0);
         dist.EncodeAndTally(encoder, bucket);
         if(value < 0) value = ~value; // number will either be 0 or 0* 1 (0|1)*
-        if(bits > 0) EncodeUniform(encoder, value & ~(1 << (bits-1)), 1 << (bits-1)); // encode the bits below the most significant bit
+        if(bits > 0) EncodeBits(encoder, value, bits-1); // encode the bits below the most significant bit
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
         int bucket = dist.DecodeAndTally(decoder);
         int bits = (bucket & 0x1F);
-        int value = bits > 0 ? DecodeUniform(decoder, 1 << (bits-1)) | (1 << (bits-1)) : 0; // decode the bits below the most significant bit
+        int value = bits > 0 ? DecodeBits(decoder, bits-1) | (1 << (bits-1)) : 0; // decode the bits below the most significant bit
         return bucket & 0x20 ? ~value : value; // restore sign if this number belonged to a negative bucket
     }
 

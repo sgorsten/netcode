@@ -13,6 +13,9 @@ namespace netcode
     void EncodeUniform(ArithmeticEncoder & encoder, code_t x, code_t d);
     code_t DecodeUniform(ArithmeticDecoder & decoder, code_t d);
 
+    void EncodeBits(ArithmeticEncoder & encoder, code_t value, int n); // Encode the least significant n bits of value
+    code_t DecodeBits(ArithmeticDecoder & decoder, int n); // Decode n bits and pack them into the least significant bits of an integer
+
     class SymbolDistribution
     {
         std::vector<code_t> counts;
