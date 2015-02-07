@@ -1,24 +1,91 @@
-#include "Util.h"
+#include "Utility.h"
 
 #include <cassert>
 
 namespace netcode
 {
-    void EncodeUniform(ArithmeticEncoder & encoder, code_t x, code_t d)
+    enum : code_t
     {
-	    encoder.Encode(x, x + 1, d);
+	    NUM_BITS = sizeof(code_t) * 8,
+	    BOUND0 = 0,
+	    BOUND1 = 1ULL << (NUM_BITS - 3),
+	    BOUND2 = 1ULL << (NUM_BITS - 2),
+	    BOUND3 = BOUND1 | BOUND2,
+	    BOUND4 = 1ULL << (NUM_BITS - 1),	
+	    MAX_DENOM = BOUND1 - 1
+    };
+
+    ///////////////////////
+    // ArithmeticEncoder //
+    ///////////////////////
+
+    ArithmeticEncoder::ArithmeticEncoder(std::vector<uint8_t> & buffer) : buffer(buffer), bitIndex(7), underflow(), min(BOUND0), max(BOUND4)
+    {
+
     }
 
-    code_t DecodeUniform(ArithmeticDecoder & decoder, code_t d)
+    void ArithmeticEncoder::Write(int bit)
     {
-	    auto x = decoder.Decode(d);
-	    decoder.Confirm(x, x + 1);
-	    return x;
+	    if(++bitIndex == 8)
+	    {
+		    buffer.push_back(0);
+		    bitIndex = 0;
+	    }
+
+	    buffer.back() |= bit << bitIndex;
+    }
+
+    void ArithmeticEncoder::Rescale(code_t window)
+    {
+	    min = (min - window) << 1;
+	    max = (max - window) << 1;
+    }
+
+    void ArithmeticEncoder::Encode(code_t a, code_t b, code_t denom)
+    {
+	    assert(0 <= a && a < b && b <= denom && denom <= MAX_DENOM);
+	    const code_t step = (max - min) / denom;
+	    max = min + step * b;
+	    min = min + step * a;
+
+	    while(true)
+	    {
+		    if(max <= BOUND2)
+		    {
+			    Write(0);
+			    for(; underflow > 0; --underflow) Write(1);
+			    Rescale(BOUND0);
+		    }
+		    else if(BOUND2 <= min)
+		    {
+			    Write(1);
+			    for(; underflow > 0; --underflow) Write(0);
+			    Rescale(BOUND2);
+		    }
+		    else break;
+	    }
+
+	    while(BOUND1 <= min && max <= BOUND3)
+	    {
+		    Rescale(BOUND1);
+		    ++underflow;
+	    }
+    }
+
+    void ArithmeticEncoder::Finish()
+    {
+	    Write(1);
+    }
+
+    void EncodeUniform(ArithmeticEncoder & encoder, code_t x, code_t d)
+    {
+        assert(x < d && d <= MAX_DENOM);
+	    encoder.Encode(x, x + 1, d);
     }
 
     void EncodeBits(ArithmeticEncoder & encoder, code_t value, int n)
     {
-        if(n > 16)
+        if(1 << n > MAX_DENOM)
         {
             EncodeBits(encoder, value, 16);
             EncodeBits(encoder, value>>16, n-16);
@@ -26,9 +93,77 @@ namespace netcode
         else EncodeUniform(encoder, value & ~(-1U << n), 1 << n);
     }
 
+    ///////////////////////
+    // ArithmeticDecoder //
+    ///////////////////////
+
+    ArithmeticDecoder::ArithmeticDecoder(const std::vector<uint8_t> & buffer) : buffer(buffer), byteIndex(), bitIndex(), min(BOUND0), max(BOUND4), code(), step()
+    {
+	    for(int i=1; i<NUM_BITS; ++i) code = (code << 1) | Read();
+    }
+
+    code_t ArithmeticDecoder::Read()
+    {
+	    if(byteIndex == buffer.size()) return 0;
+	    int r = (buffer[byteIndex] >> bitIndex) & 1;
+	    if(++bitIndex == 8)
+	    {
+		    ++byteIndex;
+		    bitIndex = 0;
+	    }
+	    return r;
+    }
+
+    void ArithmeticDecoder::Rescale(code_t window)
+    {
+	    min = (min - window) << 1;
+	    max = (max - window) << 1;
+	    code = ((code - window) << 1) | Read();
+    }
+
+    code_t ArithmeticDecoder::Decode(code_t denom)
+    {
+	    assert(0 < denom && denom <= MAX_DENOM);
+	    step = (max - min) / denom;
+	    return (code - min) / step;
+    }
+
+    void ArithmeticDecoder::Confirm(code_t a, code_t b)
+    {
+	    assert(0 <= a && a < b);
+	    max = min + step * b;
+	    min = min + step * a;
+
+	    while(true)
+	    {
+		    if(max <= BOUND2)
+		    {
+			    Rescale(BOUND0);
+		    }
+		    else if(BOUND2 <= min)
+		    {
+			    Rescale(BOUND2);
+		    }
+		    else break;
+	    }
+
+	    while(BOUND1 <= min && max <= BOUND3)
+	    {
+		    Rescale(BOUND1);
+	    }
+    }
+
+    code_t DecodeUniform(ArithmeticDecoder & decoder, code_t d)
+    {
+        assert(d <= MAX_DENOM);
+	    auto x = decoder.Decode(d);
+	    decoder.Confirm(x, x + 1);
+	    return x;
+    }
+
     code_t DecodeBits(ArithmeticDecoder & decoder, int n)
     {
-        if(n > 16)
+        if(1 << n > MAX_DENOM)
         {
             code_t lo = DecodeBits(decoder, 16);
             code_t hi = DecodeBits(decoder, n-16);
@@ -36,6 +171,10 @@ namespace netcode
         }
         return DecodeUniform(decoder, 1 << n);
     }
+
+    ////////////////////////
+    // SymbolDistribution //
+    ////////////////////////
 
     SymbolDistribution::SymbolDistribution(size_t symbols) : counts(symbols,1)
     {
@@ -119,6 +258,10 @@ namespace netcode
         return 0;
     }
 
+    //////////////////////////
+    // Integer distribution //
+    //////////////////////////
+
     static int CountSignificantBits(int value)
     {
 	    int sign = value < 0 ? -1 : 0;
@@ -191,32 +334,9 @@ namespace netcode
         return bucket & 0x20 ? ~value : value; // restore sign if this number belonged to a negative bucket
     }
 
-    RangeAllocator::RangeAllocator() : totalCapacity()
-    {
-
-    }
-
-    size_t RangeAllocator::Allocate(size_t amount)
-    {
-        for(auto it = freeList.rbegin(); it != freeList.rend(); ++it)
-        {
-            if(it->second == amount)
-            {
-                auto offset = it->first;
-                freeList.erase(freeList.begin() + (&*it - freeList.data()));
-                return offset;
-            }
-        }
-
-        auto offset = totalCapacity;
-        totalCapacity += amount;
-        return offset;
-    }
-
-    void RangeAllocator::Free(size_t offset, size_t amount)
-    {
-        freeList.push_back({offset,amount});
-    }
+    ////////////////////
+    // CurvePredictor //
+    ////////////////////
 
     CurvePredictor::CurvePredictor(const int (&m)[4][4]) :
         c0(m[1][1]*m[2][2]*m[3][3] + m[3][1]*m[1][2]*m[2][3] + m[2][1]*m[3][2]*m[1][3] - m[1][1]*m[3][2]*m[2][3] - m[2][1]*m[1][2]*m[3][3] - m[3][1]*m[2][2]*m[1][3]),
@@ -280,6 +400,10 @@ namespace netcode
         return CurvePredictor(matrix);
     }
 
+    ///////////////////////
+    // FieldDistribution //
+    ///////////////////////
+
     int FieldDistribution::GetBestDistribution(int sampleCount) const
     {
         int bestDist = 0;
@@ -309,5 +433,36 @@ namespace netcode
         int value = dists[best].DecodeAndTally(decoder) + predictors[best](prevValues);
         for(int i=0; i<=sampleCount; ++i) if(i != best) dists[i].Tally(value - predictors[i](prevValues));
         return value;
+    }
+
+    ////////////////////
+    // RangeAllocator //
+    ////////////////////
+
+    RangeAllocator::RangeAllocator() : totalCapacity()
+    {
+
+    }
+
+    size_t RangeAllocator::Allocate(size_t amount)
+    {
+        for(auto it = freeList.rbegin(); it != freeList.rend(); ++it)
+        {
+            if(it->second == amount)
+            {
+                auto offset = it->first;
+                freeList.erase(freeList.begin() + (&*it - freeList.data()));
+                return offset;
+            }
+        }
+
+        auto offset = totalCapacity;
+        totalCapacity += amount;
+        return offset;
+    }
+
+    void RangeAllocator::Free(size_t offset, size_t amount)
+    {
+        freeList.push_back({offset,amount});
     }
 }

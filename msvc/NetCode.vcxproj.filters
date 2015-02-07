@@ -15,14 +15,11 @@
     <ClInclude Include="..\src\Client.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\Util.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\Arith.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\netcode.h" />
     <ClInclude Include="..\include\netcodex.h" />
+    <ClInclude Include="..\src\Utility.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Policy.cpp">
@@ -34,16 +31,13 @@
     <ClCompile Include="..\src\Client.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\Util.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\Arith.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\NetCode.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\NetCodeX.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Utility.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

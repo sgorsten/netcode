@@ -21,17 +21,15 @@
   <ItemGroup>
     <ClInclude Include="..\include\netcode.h" />
     <ClInclude Include="..\include\netcodex.h" />
-    <ClInclude Include="..\src\Arith.h" />
     <ClInclude Include="..\src\Client.h" />
     <ClInclude Include="..\src\Policy.h" />
     <ClInclude Include="..\src\Server.h" />
-    <ClInclude Include="..\src\Util.h" />
+    <ClInclude Include="..\src\Utility.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\Arith.cpp" />
     <ClCompile Include="..\src\Client.cpp" />
     <ClCompile Include="..\src\NetCodeX.cpp" />
-    <ClCompile Include="..\src\Util.cpp" />
+    <ClCompile Include="..\src\Utility.cpp" />
     <ClCompile Include="..\src\Policy.cpp" />
     <ClCompile Include="..\src\Server.cpp" />
     <ClCompile Include="..\src\NetCode.cpp" />
