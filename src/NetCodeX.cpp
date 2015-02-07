@@ -64,9 +64,9 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
 
     float headerCost = 0;
     headerCost += sizeof(int32_t)*8.0f;
-    headerCost += log(client->protocol->maxFrameDelta+1) * 4;
+    headerCost += logf(client->protocol->maxFrameDelta+1) * 4;
     headerCost += distribs.newObjectCountDist.GetExpectedCost();
-    headerCost += newUnitCost * avgNewUnits;
+    headerCost += newUnitCost * (float)avgNewUnits;
     headerCost += distribs.delObjectCountDist.GetExpectedCost();
 
     printf("\ncode efficiency summary\n\n");

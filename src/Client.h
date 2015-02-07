@@ -6,8 +6,6 @@
 #include <memory>
 #include <map>
 
-struct NCview;
-
 namespace netcode
 {
     struct ClientFrame

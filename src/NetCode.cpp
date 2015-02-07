@@ -1,8 +1,8 @@
-#include "netcode.h"
-
 #include "Protocol.h"
 #include "Server.h"
 #include "Client.h"
+
+struct NCblob { std::vector<uint8_t> memory; };
 
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta)                                       { return new NCprotocol(maxFrameDelta); }
 NCclass *       ncCreateClass     (NCprotocol * protocol)                                   { return new NCclass(protocol); }

@@ -1,12 +1,9 @@
 #ifndef NETCODE_PROTOCOL_H
 #define NETCODE_PROTOCOL_H
 
+#include "netcode.h"
+
 #include "Utility.h"
-
-struct NCblob { std::vector<uint8_t> memory; };
-
-struct NCprotocol;
-struct NCclass;
 
 struct NCint
 {

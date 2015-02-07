@@ -5,9 +5,6 @@
 
 #include <map>
 
-struct NCpeer;
-struct NCobject;
-
 struct NCserver
 {
 	const NCprotocol * protocol;
