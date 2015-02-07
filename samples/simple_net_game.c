@@ -1,4 +1,5 @@
 #include <netcode.h>
+#include <netcodex.h>
 #include <GLFW/glfw3.h>
 #include <WinSock2.h>
 
@@ -293,10 +294,12 @@ struct Client * CreateClient(const char * ip, int port)
     return c;
 }
 
-void DestroyClient(struct Client * s)
+void DestroyClient(struct Client * c)
 {
-    closesocket(s->clientSocket);
-    free(s);
+    closesocket(c->clientSocket);
+    free(c);
+
+    ncxPrintClientCodeEfficiency(c->nclient);
 }
 
 int IsClientFinished(struct Client * c)

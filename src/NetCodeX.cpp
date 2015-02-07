@@ -70,6 +70,8 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
     headerCost += newUnitCost * avgNewUnits;
     headerCost += distribs.delObjectCountDist.GetExpectedCost();
 
+    printf("\ncode efficiency summary\n\n");
+
     printf("update header: %f bits\n", headerCost);
     printf("  frame counter:        %f bits\n", sizeof(int32_t)*8.0f);
     printf("  prev frame deltas:    %f bits\n", log(client->policy.maxFrameDelta+1) * 4);
@@ -81,7 +83,7 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
     printf("  deleted object count: %f bits\n", distribs.delObjectCountDist.GetExpectedCost());
     printf("  deleted units:        ??? bits\n");
     printf("    # per frame:        %f objects\n", distribs.delObjectCountDist.GetAverageValue());
-    printf("    object index:       ??? bits\n");
+    printf("    object index:       ??? bits\n\n");
 
     const auto & classes = client->policy.classes;
     for(int i=0; i<classes.size(); ++i)
