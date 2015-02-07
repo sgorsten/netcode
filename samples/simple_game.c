@@ -34,15 +34,15 @@ void spawn_unit(int i)
 {
     units[i].team = i < 10 ? 0 : 1;
     units[i].hp = 100;
-    units[i].x = rand() % 320 + units[i].team * 960;
-    units[i].y = rand() % 720;
+    units[i].x = (float)(rand() % 320 + units[i].team * 960);
+    units[i].y = (float)(rand() % 720);
     units[i].object = ncCreateObject(server, unitClass);
 }
 
 int main(int argc, char * argv[])
 {
-    int i, j, n, x, y, h; double a, t0, t1, timestep; 
-    NCblob * updateBlob, * responseBlob; NCview * view;
+    int i, j, n, x, y, h; float a, t0, t1, timestep; 
+    NCblob * updateBlob, * responseBlob; const NCview * view;
 
     /* init protocol */
     protocol = ncCreateProtocol(30);
@@ -65,10 +65,10 @@ int main(int argc, char * argv[])
 	glfwMakeContextCurrent(win);
 
     /* main loop */
-	t0 = glfwGetTime();
+	t0 = (float)glfwGetTime();
 	while (!glfwWindowShouldClose(win))
 	{
-    	t1 = glfwGetTime(), timestep = t1 - t0;
+    	t1 = (float)glfwGetTime(), timestep = t1 - t0;
 		if (timestep < 1.0 / 60) continue;
 		t0 = t1;
 
@@ -76,7 +76,7 @@ int main(int argc, char * argv[])
         for(i=0; i<20; ++i)
         {
             /* select a target */
-            int target=0; float dx, dy, dist, best=HUGE_VALF;
+            int target=0; float dx, dy, dist, best=40000000;
             for(j=0; j<20; ++j)
             {
                 if(units[i].team == units[j].team) continue;
@@ -154,8 +154,8 @@ int main(int argc, char * argv[])
                 }
                 for(j=0; j<12; ++j)
                 {
-                    a = 6.28 * j / 12;
-                    glVertex2d(x + cos(a)*10, y + sin(a)*10);
+                    a = 6.28f * j / 12;
+                    glVertex2f(x + cosf(a)*10, y + sinf(a)*10);
                 }
                 glEnd();
                 

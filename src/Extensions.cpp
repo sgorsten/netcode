@@ -1,5 +1,4 @@
 #include "netcodex.h"
-
 #include "Server.h"
 #include "Client.h"
 
@@ -64,7 +63,7 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
 
     float headerCost = 0;
     headerCost += sizeof(int32_t)*8.0f;
-    headerCost += logf(client->protocol->maxFrameDelta+1) * 4;
+    headerCost += (float)log(client->protocol->maxFrameDelta+1) * 4;
     headerCost += distribs.newObjectCountDist.GetExpectedCost();
     headerCost += newUnitCost * (float)avgNewUnits;
     headerCost += distribs.delObjectCountDist.GetExpectedCost();
@@ -85,11 +84,11 @@ void ncxPrintClientCodeEfficiency (struct NCclient * client)
     printf("    object index:       ??? bits\n\n");
 
     const auto & classes = client->protocol->classes;
-    for(int i=0; i<classes.size(); ++i)
+    for(size_t i=0; i<classes.size(); ++i)
     {
         printf("class %d:\n", i);
         float totalCost = 0;
-        for(int j=0; j<classes[i]->fields.size(); ++j)
+        for(size_t j=0; j<classes[i]->fields.size(); ++j)
         {
             auto & dist = distribs.intFieldDists[classes[i]->fields[j]->uniqueId];
             int best = dist.GetBestDistribution(4);

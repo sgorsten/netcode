@@ -1,4 +1,4 @@
-#include "Util.h"
+#include "Utility.h"
 #include <iostream>
 #include <random>
 
@@ -38,7 +38,7 @@ void CompressFrame(const int * values, size_t numValues)
 	std::vector<uint8_t> buffer;
 	ArithmeticEncoder encoder(buffer);
 	IntegerDistribution dist1;
-	for (int i = 0; i < numValues; ++i)
+	for (size_t i = 0; i < numValues; ++i)
 	{
 		dist1.EncodeAndTally(encoder, values[i]);
 	}
@@ -46,7 +46,7 @@ void CompressFrame(const int * values, size_t numValues)
 
 	ArithmeticDecoder decoder(buffer);
 	IntegerDistribution dist2;
-	for (int i = 0; i < numValues; ++i)
+	for (size_t i = 0; i < numValues; ++i)
 	{
 		int value = dist2.DecodeAndTally(decoder);
 		if (value != values[i])

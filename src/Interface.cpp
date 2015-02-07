@@ -1,4 +1,3 @@
-#include "Protocol.h"
 #include "Server.h"
 #include "Client.h"
 
@@ -33,6 +32,4 @@ int             ncGetViewInt      (const NCview * view, const NCint * field)    
 const void *    ncGetBlobData     (const NCblob * blob)                                     { return blob->memory.data(); }
 int             ncGetBlobSize     (const NCblob * blob)                                     { return blob->memory.size(); }
 void            ncFreeBlob        (NCblob * blob)                                           { delete blob; }
-
-
 

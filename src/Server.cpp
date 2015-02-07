@@ -90,7 +90,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
     int32_t frame = server->frame, cutoff = frame - server->protocol->maxFrameDelta;
     int32_t prevFrames[4];
-    for(int i=0; i<4; ++i)
+    for(size_t i=0; i<4; ++i)
     {
         prevFrames[i] = ackFrames.size() > i ? ackFrames[i] : 0;
         if(prevFrames[i] < cutoff) prevFrames[i] = 0;

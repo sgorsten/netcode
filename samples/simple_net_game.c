@@ -113,8 +113,8 @@ void SpawnUnit(struct Server * s, int i)
 {
     s->units[i].team = i < 10 ? 0 : 1;
     s->units[i].hp = 100;
-    s->units[i].x = rand() % (WINDOW_WIDTH/4) + s->units[i].team * (WINDOW_WIDTH*3/4);
-    s->units[i].y = rand() % WINDOW_HEIGHT;
+    s->units[i].x = (float)(rand() % (WINDOW_WIDTH/4) + s->units[i].team * (WINDOW_WIDTH*3/4));
+    s->units[i].y = (float)(rand() % WINDOW_HEIGHT);
     s->units[i].nobj = ncCreateObject(s->nserver, unitClass);
 }
 
@@ -193,7 +193,7 @@ void UpdateServer(struct Server * s, float timestep)
     for(i=0; i<20; ++i)
     {
         /* select a target */
-        int target=0; float dx, dy, dist, best=HUGE_VALF;
+        int target=0; float dx, dy, dist, best=40000000;
         for(j=0; j<20; ++j)
         {
             if(s->units[i].team == s->units[j].team) continue;
@@ -356,7 +356,7 @@ void UpdateClient(struct Client * c)
     /* determine team */
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == teamClass) c->team = ncGetViewInt(nview, teamId);
     }
 
@@ -369,7 +369,7 @@ void UpdateClient(struct Client * c)
     glColor3f(0.5f,0.3f,0.1f);
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == unitClass && ncGetViewInt(nview, unitTeamId) == c->team)
         {
             DrawCircle(ncGetViewInt(nview, unitX), ncGetViewInt(nview, unitY), 120);
@@ -379,7 +379,7 @@ void UpdateClient(struct Client * c)
     /* draw units */
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
-        NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->nclient, i);
         if(ncGetViewClass(nview) == unitClass)
         {
             /* draw colored circle to represent unit */

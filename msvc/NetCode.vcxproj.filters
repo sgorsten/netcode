@@ -28,16 +28,16 @@
     <ClCompile Include="..\src\Client.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\NetCode.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\NetCodeX.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\Utility.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Protocol.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Extensions.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Interface.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

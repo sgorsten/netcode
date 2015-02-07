@@ -90,7 +90,7 @@ namespace netcode
             EncodeBits(encoder, value, 16);
             EncodeBits(encoder, value>>16, n-16);
         }
-        else EncodeUniform(encoder, value & ~(-1U << n), 1 << n);
+        else EncodeUniform(encoder, value & ~(code_t(-1) << n), 1 << n);
     }
 
     ///////////////////////
@@ -238,11 +238,11 @@ namespace netcode
     size_t SymbolDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
         code_t d = 0;
-	    for (int i = 0; i < counts.size(); ++i) d += counts[i];
+	    for (size_t i = 0; i < counts.size(); ++i) d += counts[i];
 	    code_t x = decoder.Decode(d);
 
 	    code_t a = 0;
-	    for (int i = 0; i < counts.size(); ++i)
+	    for (size_t i = 0; i < counts.size(); ++i)
 	    {
 		    code_t b = a + counts[i];
 		    if (b > x)

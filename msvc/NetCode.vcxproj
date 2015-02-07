@@ -28,11 +28,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\Client.cpp" />
-    <ClCompile Include="..\src\NetCodeX.cpp" />
+    <ClCompile Include="..\src\Extensions.cpp" />
     <ClCompile Include="..\src\Utility.cpp" />
     <ClCompile Include="..\src\Protocol.cpp" />
     <ClCompile Include="..\src\Server.cpp" />
-    <ClCompile Include="..\src\NetCode.cpp" />
+    <ClCompile Include="..\src\Interface.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}</ProjectGuid>
