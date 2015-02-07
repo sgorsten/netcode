@@ -101,9 +101,9 @@ namespace netcode
     float IntegerDistribution::GetExpectedCost() const
     {
         float cost = 0;
-        for(int bits=0; bits<32; ++bits)
+        for(int bits=1; bits<=32; ++bits)
         {
-            float p = dist.GetProbability(bits);
+            float p = dist.GetProbability(bits-1);
             cost += p * (-log(p) + bits);
         }
         return cost;
@@ -119,6 +119,10 @@ namespace netcode
     {
 	    int bits = CountSignificantBits(value);
         dist.EncodeAndTally(encoder, bits-1);
+        if(bits == 1)
+        {
+            int x = 5;
+        }
 	    EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
     }
 
