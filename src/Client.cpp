@@ -32,7 +32,7 @@ std::shared_ptr<NCview> NCclient::CreateView(size_t classIndex, int uniqueId, in
     {
         if(auto ptr = it->second.lock())
         {
-            assert(ptr->cl.index == classIndex);
+            assert(ptr->cl->uniqueId == classIndex);
             return ptr;
         }        
     }

@@ -12,6 +12,12 @@
 
 void error(const char * message);
 
+/* protocol */
+struct NCprotocol * protocol;
+struct NCclass * teamClass, * unitClass;
+struct NCint * teamId;
+struct NCint * unitTeamId, * unitHp, * unitX, * unitY;
+
 struct Server * CreateServer(int port);
 void UpdateServer(struct Server * s, float timestep);
 void DestroyServer(struct Server * s);
@@ -21,9 +27,6 @@ void UpdateClient(struct Client * c);
 int IsClientFinished(struct Client * c);
 void DestroyClient(struct Client * c);
 
-struct NCclass * nteam;
-struct NCclass * nunit;
-
 int main(int argc, char * argv[])
 {
     double t0, t1, timestep; WSADATA wsad;
@@ -32,8 +35,16 @@ int main(int argc, char * argv[])
     if(WSAStartup(MAKEWORD(2,0), &wsad) != 0) error("WSAStartup(...) failed.");
     if(glfwInit() != GL_TRUE) error("glfwInit() failed.");
 
-    nteam = ncCreateClass(1); /* team */
-    nunit = ncCreateClass(4); /* team, hp, x, y */
+    /* initialize protocol */
+    protocol = ncCreateProtocol(30);
+    teamClass = ncCreateClass(protocol);
+    teamId = ncCreateInt(teamClass);
+    unitClass = ncCreateClass(protocol);
+    unitTeamId = ncCreateInt(unitClass);
+    unitHp = ncCreateInt(unitClass);
+    unitX = ncCreateInt(unitClass);
+    unitY = ncCreateInt(unitClass);
+
     printf("(h)ost, (j)oin, or (q)uit?\n");
     switch(getchar())
     {
@@ -104,7 +115,7 @@ void SpawnUnit(struct Server * s, int i)
     s->units[i].hp = 100;
     s->units[i].x = rand() % (WINDOW_WIDTH/4) + s->units[i].team * (WINDOW_WIDTH*3/4);
     s->units[i].y = rand() % WINDOW_HEIGHT;
-    s->units[i].nobj = ncCreateObject(s->nserver, nunit);
+    s->units[i].nobj = ncCreateObject(s->nserver, unitClass);
 }
 
 struct Server * CreateServer(int port)
@@ -123,13 +134,12 @@ struct Server * CreateServer(int port)
     serverAddr.sin_port = htons(port);
     if(bind(s->serverSocket, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) error("bind(...) failed.");
 
-    struct NCclass * classes[] = {nteam, nunit};
-    s->nserver = ncCreateServer(classes, 2, 30);
+    s->nserver = ncCreateServer(protocol);
 
     for(i=0; i<2; ++i)
     {
-        s->nteams[i] = ncCreateObject(s->nserver, nteam);
-        ncSetObjectInt(s->nteams[i], 0, i);
+        s->nteams[i] = ncCreateObject(s->nserver, teamClass);
+        ncSetObjectInt(s->nteams[i], teamId, i);
     }
 
     for(i=0; i<20; ++i) SpawnUnit(s, i);
@@ -221,10 +231,10 @@ void UpdateServer(struct Server * s, float timestep)
     for(i=0; i<20; ++i)
     {
         /* set state for each object */
-        ncSetObjectInt(s->units[i].nobj, 0, s->units[i].team);
-        ncSetObjectInt(s->units[i].nobj, 1, s->units[i].hp);
-        ncSetObjectInt(s->units[i].nobj, 2, (int)s->units[i].x);
-        ncSetObjectInt(s->units[i].nobj, 3, (int)s->units[i].y);
+        ncSetObjectInt(s->units[i].nobj, unitTeamId, s->units[i].team);
+        ncSetObjectInt(s->units[i].nobj, unitHp, s->units[i].hp);
+        ncSetObjectInt(s->units[i].nobj, unitX, (int)s->units[i].x);
+        ncSetObjectInt(s->units[i].nobj, unitY, (int)s->units[i].y);
 
         /* determine if unit is visible to other team */
         int isVisible = 0;
@@ -285,8 +295,7 @@ struct Client * CreateClient(const char * ip, int port)
     c->serverAddr.sin_addr.s_addr = inet_addr(ip);
     c->serverAddr.sin_port = htons(port);
 
-    struct NCclass * classes[] = {nteam, nunit};
-    c->nclient = ncCreateClient(classes, 2, 30);    
+    c->nclient = ncCreateClient(protocol);
 	c->win = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Simple Game", NULL, NULL);
 	if (!c->win) error("glfwCreateWindow(...) failed.");
 	glfwMakeContextCurrent(c->win);
@@ -348,7 +357,7 @@ void UpdateClient(struct Client * c)
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
         struct NCview * nview = ncGetView(c->nclient, i);
-        if(ncGetViewClass(nview) == nteam) c->team = ncGetViewInt(nview, 0);
+        if(ncGetViewClass(nview) == teamClass) c->team = ncGetViewInt(nview, teamId);
     }
 
     /* redraw client */        
@@ -361,9 +370,9 @@ void UpdateClient(struct Client * c)
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
         struct NCview * nview = ncGetView(c->nclient, i);
-        if(ncGetViewClass(nview) == nunit && ncGetViewInt(nview, 0) == c->team)
+        if(ncGetViewClass(nview) == unitClass && ncGetViewInt(nview, unitTeamId) == c->team)
         {
-            DrawCircle(ncGetViewInt(nview, 2), ncGetViewInt(nview, 3), 120);
+            DrawCircle(ncGetViewInt(nview, unitX), ncGetViewInt(nview, unitY), 120);
         }
     }
 
@@ -371,12 +380,12 @@ void UpdateClient(struct Client * c)
     for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
     {
         struct NCview * nview = ncGetView(c->nclient, i);
-        if(ncGetViewClass(nview) == nunit)
+        if(ncGetViewClass(nview) == unitClass)
         {
             /* draw colored circle to represent unit */
-            x = ncGetViewInt(nview, 2);
-            y = ncGetViewInt(nview, 3);
-            switch(ncGetViewInt(nview, 0))
+            x = ncGetViewInt(nview, unitX);
+            y = ncGetViewInt(nview, unitY);
+            switch(ncGetViewInt(nview, unitTeamId))
             {
             case 0: glColor3f(0,1,1); break;
             case 1: glColor3f(1,0,0); break;
@@ -384,7 +393,7 @@ void UpdateClient(struct Client * c)
             DrawCircle(x, y, 10);
                 
             /* draw unit health bar */
-            h = ncGetViewInt(nview, 1);
+            h = ncGetViewInt(nview, unitHp);
             glBegin(GL_QUADS);
             glColor3f(0,1,0);
             glVertex2i(x-10, y-13);
