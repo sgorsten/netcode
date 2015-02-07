@@ -9,6 +9,9 @@ void TestIntegerCoding();
 
 int main(int argc, char * argv[])
 {
+    std::vector<uint8_t> buffer;
+    IntegerDistribution d;
+
 	TestRanges();
 	TestIntegerCoding();
 }

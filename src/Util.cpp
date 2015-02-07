@@ -104,10 +104,10 @@ namespace netcode
         for(int bits=1; bits<=32; ++bits)
         {
             float p = dist.GetProbability(bits-1);
-            cost += p * (-log(p) + bits);
+            cost += p * (-log(p) + bits-1);
 
             p = dist.GetProbability(bits-1 + 32);
-            cost += p * (-log(p) + bits);
+            cost += p * (-log(p) + bits-1);
         }
         return cost;
     }
@@ -124,14 +124,19 @@ namespace netcode
 	    int bits = CountSignificantBits(value);
         int bucket = bits-1 + (value < 0 ? 32 : 0);
         dist.EncodeAndTally(encoder, bucket);
-	    EncodeUniform(encoder, value & (-1U >> (32 - bits)), 1 << bits);
+
+        uint32_t val = value;
+        val &= (-1U >> (32 - bits) >> 1); // remove all insignificant bits, and the most significant bit (since sign is known from the bucket index)
+	    EncodeUniform(encoder, val, 1 << (bits-1));
     }
 
     int IntegerDistribution::DecodeAndTally(ArithmeticDecoder & decoder)
     {
         int bucket = dist.DecodeAndTally(decoder);
         int bits = (bucket & 0x1F) + 1;
-	    return static_cast<int>(DecodeUniform(decoder, 1 << bits) << (32 - bits)) >> (32 - bits);
+        uint32_t val = DecodeUniform(decoder, 1 << (bits-1));
+        if(bucket & 0x20) val |= 1 << (bits-1); // regenerate the sign bit from the bucket index
+	    return static_cast<int>(val << (32 - bits)) >> (32 - bits); // regenerate insignificant bits by sign-extension
     }
 
     RangeAllocator::RangeAllocator() : totalCapacity()
