@@ -164,14 +164,16 @@ void UpdateServer(struct Server * s, float timestep)
 {
     int i, j; struct timeval tv; fd_set fds;
     
-    /* read any incoming messages on our socket */
-    tv.tv_sec = 0;
-    tv.tv_usec = 1000;
-    FD_ZERO(&fds);
-    FD_SET(s->serverSocket, &fds);
-    if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
-    if(FD_ISSET(s->serverSocket, &fds))
+    while(1)
     {
+        /* read any incoming messages on our socket */
+        tv.tv_sec = 0;
+        tv.tv_usec = 1000;
+        FD_ZERO(&fds);
+        FD_SET(s->serverSocket, &fds);
+        if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
+        if(!FD_ISSET(s->serverSocket, &fds)) break;
+
         char buffer[2000];
         SOCKADDR_IN remoteAddr;
         int remoteLen = sizeof(remoteAddr);
@@ -313,9 +315,8 @@ struct Client * CreateClient(const char * ip, int port)
 void DestroyClient(struct Client * c)
 {
     closesocket(c->clientSocket);
-    free(c);
-
     ncxPrintClientCodeEfficiency(c->nclient);
+    free(c);
 }
 
 int IsClientFinished(struct Client * c)
@@ -339,16 +340,18 @@ void UpdateClient(struct Client * c)
 {
     int i, n, x, y, h;
 
-    /* check for incoming data on any sockets */
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 1000;
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(c->clientSocket, &fds);
-    if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
-    if(FD_ISSET(c->clientSocket, &fds))
+    while(1)
     {
+        /* check for incoming data on any sockets */
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 1000;
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(c->clientSocket, &fds);
+        if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) error("select(...) failed.");
+        if(!FD_ISSET(c->clientSocket, &fds)) break;
+
         char buffer[2000];
         SOCKADDR_IN remoteAddr;
         int remoteLen = sizeof(remoteAddr);
