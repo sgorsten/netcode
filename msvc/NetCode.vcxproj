@@ -21,18 +21,18 @@
   <ItemGroup>
     <ClInclude Include="..\include\netcode.h" />
     <ClInclude Include="..\include\netcodex.h" />
-    <ClInclude Include="..\src\Client.h" />
-    <ClInclude Include="..\src\Protocol.h" />
-    <ClInclude Include="..\src\Server.h" />
-    <ClInclude Include="..\src\Utility.h" />
+    <ClInclude Include="..\src\nc_client.h" />
+    <ClInclude Include="..\src\nc_protocol.h" />
+    <ClInclude Include="..\src\nc_server.h" />
+    <ClInclude Include="..\src\nc_utility.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\Client.cpp" />
-    <ClCompile Include="..\src\Extensions.cpp" />
-    <ClCompile Include="..\src\Utility.cpp" />
-    <ClCompile Include="..\src\Protocol.cpp" />
-    <ClCompile Include="..\src\Server.cpp" />
-    <ClCompile Include="..\src\Interface.cpp" />
+    <ClCompile Include="..\src\nc_client.cpp" />
+    <ClCompile Include="..\src\extensions.cpp" />
+    <ClCompile Include="..\src\nc_utility.cpp" />
+    <ClCompile Include="..\src\nc_protocol.cpp" />
+    <ClCompile Include="..\src\nc_server.cpp" />
+    <ClCompile Include="..\src\implementation.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}</ProjectGuid>

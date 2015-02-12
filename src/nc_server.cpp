@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "Server.h"
+#include "nc_server.h"
 
 using namespace netcode;
 
