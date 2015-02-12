@@ -3,5 +3,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\tests\main.cpp" />
     <ClCompile Include="..\..\src\tests\arith.cpp" />
+    <ClCompile Include="..\..\src\tests\symbol.cpp" />
+    <ClCompile Include="..\..\src\tests\integer.cpp" />
   </ItemGroup>
 </Project>
