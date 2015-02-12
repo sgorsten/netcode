@@ -28,7 +28,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\client.cpp" />
-    <ClCompile Include="..\src\extend.cpp" />
+    <ClCompile Include="..\src\extensions.cpp" />
     <ClCompile Include="..\src\utility.cpp" />
     <ClCompile Include="..\src\protocol.cpp" />
     <ClCompile Include="..\src\server.cpp" />
