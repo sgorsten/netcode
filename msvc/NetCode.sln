@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimpleGame", "SimpleGame\Si
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimpleNetGame", "SimpleNetGame\SimpleNetGame.vcxproj", "{50512947-C72B-42DF-A0A2-226D36DF7567}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netcode_tests", "netcode_tests\netcode_tests.vcxproj", "{F56B6AB2-DD56-414C-82E6-58E1441C59E1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -55,6 +57,14 @@ Global
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|Win32.Build.0 = Release|Win32
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|x64.ActiveCfg = Release|x64
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|x64.Build.0 = Release|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|Win32.Build.0 = Debug|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|x64.ActiveCfg = Debug|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|x64.Build.0 = Debug|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|Win32.ActiveCfg = Release|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|Win32.Build.0 = Release|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.ActiveCfg = Release|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
