@@ -6,8 +6,8 @@
 // this software for any purpose, including commercial applications.
 
 #include "netcodex.h"
-#include "nc_server.h"
-#include "nc_client.h"
+#include "server.h"
+#include "client.h"
 
 namespace netcode
 {

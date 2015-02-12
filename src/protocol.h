@@ -10,7 +10,7 @@
 
 #include "netcode.h"
 
-#include "nc_utility.h"
+#include "utility.h"
 
 struct NCint
 {

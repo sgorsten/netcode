@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "nc_utility.h"
+#include "utility.h"
 
 #include <cassert>
 

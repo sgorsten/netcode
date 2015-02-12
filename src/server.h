@@ -8,7 +8,7 @@
 #ifndef NETCODE_SERVER_H
 #define NETCODE_SERVER_H
 
-#include "nc_protocol.h"
+#include "protocol.h"
 
 #include <map>
 

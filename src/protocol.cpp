@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "nc_protocol.h"
+#include "protocol.h"
 
 NCint::NCint(NCclass * cl) : cl(cl), uniqueId(cl->protocol->numIntFields++), dataOffset(cl->sizeInBytes)
 { 

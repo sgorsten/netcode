@@ -8,36 +8,36 @@
   <ItemGroup>
     <ClInclude Include="..\include\netcode.h" />
     <ClInclude Include="..\include\netcodex.h" />
-    <ClInclude Include="..\src\nc_client.h">
+    <ClInclude Include="..\src\client.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\nc_protocol.h">
+    <ClInclude Include="..\src\protocol.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\nc_server.h">
+    <ClInclude Include="..\src\server.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\nc_utility.h">
+    <ClInclude Include="..\src\utility.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\nc_client.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\nc_protocol.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\nc_server.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\nc_utility.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\implementation.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\extensions.cpp">
+    <ClCompile Include="..\src\client.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\protocol.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\server.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\utility.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\extend.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
