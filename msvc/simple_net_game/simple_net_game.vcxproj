@@ -165,7 +165,7 @@
     <ClCompile Include="..\..\samples\simple_net_game.c" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\_NetCode.vcxproj">
+    <ProjectReference Include="..\netcode\netcode.vcxproj">
       <Project>{969acb9a-2b1d-4bde-9327-9c1fef29bd24}</Project>
     </ProjectReference>
   </ItemGroup>

@@ -19,25 +19,25 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\netcode.h" />
-    <ClInclude Include="..\include\netcodex.h" />
-    <ClInclude Include="..\src\netcode\client.h" />
-    <ClInclude Include="..\src\netcode\protocol.h" />
-    <ClInclude Include="..\src\netcode\server.h" />
-    <ClInclude Include="..\src\netcode\utility.h" />
+    <ClInclude Include="..\..\include\netcode.h" />
+    <ClInclude Include="..\..\include\netcodex.h" />
+    <ClInclude Include="..\..\src\netcode\client.h" />
+    <ClInclude Include="..\..\src\netcode\protocol.h" />
+    <ClInclude Include="..\..\src\netcode\server.h" />
+    <ClInclude Include="..\..\src\netcode\utility.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\netcode\client.cpp" />
-    <ClCompile Include="..\src\netcode\extensions.cpp" />
-    <ClCompile Include="..\src\netcode\implementation.cpp" />
-    <ClCompile Include="..\src\netcode\protocol.cpp" />
-    <ClCompile Include="..\src\netcode\server.cpp" />
-    <ClCompile Include="..\src\netcode\utility.cpp" />
+    <ClCompile Include="..\..\src\netcode\client.cpp" />
+    <ClCompile Include="..\..\src\netcode\extensions.cpp" />
+    <ClCompile Include="..\..\src\netcode\implementation.cpp" />
+    <ClCompile Include="..\..\src\netcode\protocol.cpp" />
+    <ClCompile Include="..\..\src\netcode\server.cpp" />
+    <ClCompile Include="..\..\src\netcode\utility.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>NetCode</RootNamespace>
+    <RootNamespace>netcode</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
