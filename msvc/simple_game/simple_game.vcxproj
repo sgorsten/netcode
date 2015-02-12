@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{633B0956-1D5A-472F-B507-2276FA597966}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>SimpleGame</RootNamespace>
+    <RootNamespace>simple_game</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -165,7 +165,7 @@
     <ClCompile Include="..\..\samples\simple_game.c" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NetCode.vcxproj">
+    <ProjectReference Include="..\_NetCode.vcxproj">
       <Project>{969acb9a-2b1d-4bde-9327-9c1fef29bd24}</Project>
     </ProjectReference>
   </ItemGroup>
