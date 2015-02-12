@@ -3,17 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NetCode", "NetCode.vcxproj", "{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netcode", "netcode\netcode.vcxproj", "{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Test", "Test.vcxproj", "{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{46A61218-6663-4E26-A1E4-2403DE727BBA}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{46A61218-6663-4E26-A1E4-2403DE727BBA}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "simple_game", "simple_game\simple_game.vcxproj", "{633B0956-1D5A-472F-B507-2276FA597966}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{4691A49D-8E40-4713-865D-D0DB53898FCE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "simple_net_game", "simple_net_game\simple_net_game.vcxproj", "{50512947-C72B-42DF-A0A2-226D36DF7567}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimpleGame", "SimpleGame\SimpleGame.vcxproj", "{633B0956-1D5A-472F-B507-2276FA597966}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimpleNetGame", "SimpleNetGame\SimpleNetGame.vcxproj", "{50512947-C72B-42DF-A0A2-226D36DF7567}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netcode_tests", "netcode_tests\netcode_tests.vcxproj", "{F56B6AB2-DD56-414C-82E6-58E1441C59E1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,14 +29,6 @@ Global
 		{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}.Release|Win32.Build.0 = Release|Win32
 		{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}.Release|x64.ActiveCfg = Release|x64
 		{969ACB9A-2B1D-4BDE-9327-9C1FEF29BD24}.Release|x64.Build.0 = Release|x64
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Debug|Win32.ActiveCfg = Debug|Win32
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Debug|Win32.Build.0 = Debug|Win32
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Debug|x64.ActiveCfg = Debug|x64
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Debug|x64.Build.0 = Debug|x64
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Release|Win32.ActiveCfg = Release|Win32
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Release|Win32.Build.0 = Release|Win32
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Release|x64.ActiveCfg = Release|x64
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4}.Release|x64.Build.0 = Release|x64
 		{633B0956-1D5A-472F-B507-2276FA597966}.Debug|Win32.ActiveCfg = Debug|Win32
 		{633B0956-1D5A-472F-B507-2276FA597966}.Debug|Win32.Build.0 = Debug|Win32
 		{633B0956-1D5A-472F-B507-2276FA597966}.Debug|x64.ActiveCfg = Debug|x64
@@ -55,12 +45,19 @@ Global
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|Win32.Build.0 = Release|Win32
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|x64.ActiveCfg = Release|x64
 		{50512947-C72B-42DF-A0A2-226D36DF7567}.Release|x64.Build.0 = Release|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|Win32.Build.0 = Debug|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|x64.ActiveCfg = Debug|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Debug|x64.Build.0 = Debug|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|Win32.ActiveCfg = Release|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|Win32.Build.0 = Release|Win32
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.ActiveCfg = Release|x64
+		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{8D4F8C5C-928B-4641-A5B5-456D280D1AA4} = {4691A49D-8E40-4713-865D-D0DB53898FCE}
 		{633B0956-1D5A-472F-B507-2276FA597966} = {46A61218-6663-4E26-A1E4-2403DE727BBA}
 		{50512947-C72B-42DF-A0A2-226D36DF7567} = {46A61218-6663-4E26-A1E4-2403DE727BBA}
 	EndGlobalSection
