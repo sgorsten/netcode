@@ -1,5 +1,6 @@
 #include <netcode.h>
 #include <GLFW\glfw3.h>
+#include <WinSock2.h>
 #include <cmath>
 #include <iostream>
 
@@ -30,11 +31,23 @@ struct Server
     NCauthority * auth;
     NCobject * player;
     NCpeer * peer;
+    
+    SOCKET sock;
+    SOCKADDR_IN clientAddr;
 
     float posX,posY, targetX,targetY;
 
     Server(const Protocol & protocol) : protocol(protocol)
     {
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if(sock == INVALID_SOCKET) throw std::runtime_error("socket(...) failed.");
+
+        SOCKADDR_IN addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(12345);
+        if(bind(sock, (SOCKADDR *)&addr, sizeof(addr)) == SOCKET_ERROR) throw std::runtime_error("bind(...) failed.");
+
         posX=targetX=320;
         posY=targetY=240;
 
@@ -43,10 +56,32 @@ struct Server
     
         peer = ncCreatePeer(auth);
         ncSetVisibility(peer, player, 1);
+
+        clientAddr = {};
     }
 
     void Update(float timestep)
     {
+        // Consume any incoming messages
+        while(1)
+        {
+            struct timeval tv = {0,0};
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(sock, &fds);
+            if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) throw std::runtime_error("select(...) failed.");
+            if(!FD_ISSET(sock, &fds)) break;
+
+            char buffer[2000];
+            SOCKADDR_IN remoteAddr;
+            int remoteLen = sizeof(remoteAddr);
+            int len = recvfrom(sock, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
+            if(len == SOCKET_ERROR) throw std::runtime_error("recvfrom(...) failed.");
+            clientAddr = remoteAddr;
+            ncConsumeMessage(peer, buffer, len);
+        }
+
+        // Handle user input
         for(int i=0, n=ncGetViewCount(peer); i<n; ++i)
         {
             auto view = ncGetView(peer, i);
@@ -57,6 +92,7 @@ struct Server
             }
         }
 
+        // Update game state
         if(timestep > 0)
         {
             float maxDist = timestep * 200;
@@ -76,6 +112,14 @@ struct Server
             ncSetObjectInt(player, protocol.characterPosX, static_cast<int>(posX));
             ncSetObjectInt(player, protocol.characterPosY, static_cast<int>(posY));
             ncPublishFrame(auth);
+
+            // Send a message to the client
+            if(clientAddr.sin_addr.s_addr != 0)
+            {
+                auto message = ncProduceMessage(peer);
+                sendto(sock, (const char *)ncGetBlobData(message), ncGetBlobSize(message), 0, (const SOCKADDR *)&clientAddr, sizeof(clientAddr));
+                ncFreeBlob(message);
+            }
         }
     }
 };
@@ -87,8 +131,18 @@ struct Client
     NCobject * input;
     NCpeer * peer;
 
+    SOCKET sock;
+    SOCKADDR_IN addr;
+
     Client(const Protocol & protocol) : protocol(protocol)
     {
+        sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if(sock == INVALID_SOCKET) throw std::runtime_error("socket(...) failed.");
+
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        addr.sin_port = htons(12345);
+
         auth = ncCreateAuthority(protocol.protocol);
         input = ncCreateObject(auth, protocol.inputCl);
         ncSetObjectInt(input, protocol.inputTargetX, 320);
@@ -100,6 +154,24 @@ struct Client
 
     void Update(GLFWwindow * win)
     {
+        // Consume any incoming messages
+        while(1)
+        {
+            struct timeval tv = {0,0};
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(sock, &fds);
+            if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) throw std::runtime_error("select(...) failed.");
+            if(!FD_ISSET(sock, &fds)) break;
+
+            char buffer[2000];
+            SOCKADDR_IN remoteAddr;
+            int remoteLen = sizeof(remoteAddr);
+            int len = recvfrom(sock, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
+            if(len == SOCKET_ERROR) throw std::runtime_error("recvfrom(...) failed.");
+            ncConsumeMessage(peer, buffer, len);
+        }
+
         // Render client-side views of server-side objects
         glClear(GL_COLOR_BUFFER_BIT);
         glPushMatrix();
@@ -133,18 +205,25 @@ struct Client
             ncSetObjectInt(input, protocol.inputTargetY, static_cast<int>(y));
         }
         ncPublishFrame(auth);
+
+        // Send a message to the server
+        auto message = ncProduceMessage(peer);
+        sendto(sock, (const char *)ncGetBlobData(message), ncGetBlobSize(message), 0, (const SOCKADDR *)&addr, sizeof(addr));
+        ncFreeBlob(message);
     }
 };
 
 int main() try
 {
-    const Protocol protocol;
-    Server server(protocol);
-    Client client(protocol);
-
+    WSADATA wsad;
+    if(WSAStartup(MAKEWORD(2,0), &wsad) != 0) throw std::runtime_error("WSAStartup(...) failed.");
     if(glfwInit() != GL_TRUE) throw std::runtime_error("glfwInit(...) failed.");
     auto win = glfwCreateWindow(640, 480, "Simple Input", nullptr, nullptr);
     glfwMakeContextCurrent(win);
+
+    const Protocol protocol;
+    Server server(protocol);
+    Client client(protocol);
 
     double t0 = glfwGetTime();
     while(!glfwWindowShouldClose(win))
@@ -153,19 +232,12 @@ int main() try
         server.Update(static_cast<float>(t1 - t0));
         t0 = t1;
 
-        auto message = ncProduceMessage(server.peer);
-        ncConsumeMessage(client.peer, ncGetBlobData(message), ncGetBlobSize(message));
-        ncFreeBlob(message);
-
         client.Update(win);
-
-        message = ncProduceMessage(client.peer);
-        ncConsumeMessage(server.peer, ncGetBlobData(message), ncGetBlobSize(message));
-        ncFreeBlob(message);
     }
 
     glfwDestroyWindow(win);
     glfwTerminate();
+    WSACleanup();
     return EXIT_SUCCESS;
 }
 catch(const std::exception & e)
