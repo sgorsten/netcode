@@ -197,7 +197,7 @@ namespace netcode
 	    code_t b = a + counts[symbol]-1, d = b;
 	    for (size_t i = symbol + 1; i < counts.size(); ++i) d += counts[i]-1;
 
-	    return float(b-a) / d;    
+	    return d > 0 ? float(b-a) / d : 0.0f;
     }
 
     float SymbolDistribution::GetProbability(size_t symbol) const

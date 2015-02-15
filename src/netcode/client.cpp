@@ -105,7 +105,7 @@ void NCclient::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	}
 
     auto & state = frames[frame].state;
-    state.resize(stateAlloc.GetTotalCapacity());
+    state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
 	for (auto view : views)

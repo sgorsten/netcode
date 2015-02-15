@@ -132,7 +132,8 @@ int main(int argc, char * argv[])
         if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from server to client via UDP */
         {
             ncConsumeMessage(clientPeer, ncGetBlobData(updateBlob), ncGetBlobSize(updateBlob));
-
+            
+            ncPublishFrame(clientAuth);
             responseBlob = ncProduceMessage(clientPeer);
             if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from client to server via UDP */
             {

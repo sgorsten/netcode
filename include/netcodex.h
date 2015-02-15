@@ -14,7 +14,9 @@ extern "C" {
 
 #include <netcode.h>
 
-void ncxPrintCodeEfficiency (NCpeer * client);
+void ncxPrintFrameset (NCpeer * peer, const char * label);
+
+void ncxPrintCodeEfficiency (NCpeer * peer);
 
 int ncxServerMemoryUsage (NCauthority * auth);
 
