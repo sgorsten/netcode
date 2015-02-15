@@ -12,7 +12,7 @@
 
 #include <map>
 
-struct NCserver
+struct NCauthority
 {
 	const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
@@ -23,8 +23,8 @@ struct NCserver
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
-	NCserver(const NCprotocol * protocol);
-    ~NCserver();
+	NCauthority(const NCprotocol * protocol);
+    ~NCauthority();
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -45,7 +45,7 @@ struct NCpeer
         bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
-    NCserver * server;
+    NCauthority * auth;
     std::vector<ObjectRecord> records;
     std::vector<std::pair<const NCobject *,bool>> visChanges;
     std::map<int, netcode::Distribs> frameDistribs;
@@ -54,7 +54,7 @@ struct NCpeer
 
     NCclient client;
 
-    NCpeer(NCserver * server);
+    NCpeer(NCauthority * auth);
     ~NCpeer();
 
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
@@ -66,11 +66,11 @@ struct NCpeer
 
 struct NCobject
 {
-    NCserver * server;
+    NCauthority * auth;
     const NCclass * cl;
 	int stateOffset;
 
-	NCobject(NCserver * server, const NCclass * cl, int stateOffset);
+	NCobject(NCauthority * auth, const NCclass * cl, int stateOffset);
     ~NCobject();
 
     void SetIntField(const NCint * field, int value);

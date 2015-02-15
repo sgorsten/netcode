@@ -24,11 +24,11 @@ struct Unit
     float x, y;
     NCobject * object;
 } units[20];
-NCserver * server;
+NCauthority * serverAuth;
 NCpeer * serverPeer;
 
 /* Client state */
-NCserver * client;
+NCauthority * clientAuth;
 NCpeer * clientPeer;
 GLFWwindow * win;
 
@@ -44,7 +44,7 @@ void spawn_unit(int i)
     units[i].hp = 100;
     units[i].x = (float)(rand() % 320 + units[i].team * 960);
     units[i].y = (float)(rand() % 720);
-    units[i].object = ncCreateObject(server, unitClass);
+    units[i].object = ncCreateObject(serverAuth, unitClass);
 }
 
 int main(int argc, char * argv[])
@@ -61,13 +61,13 @@ int main(int argc, char * argv[])
     yField = ncCreateInt(unitClass);
 
     /* init server */
-    server = ncCreateServer(protocol);
+    serverAuth = ncCreateAuthority(protocol);
     for(i=0; i<20; ++i) spawn_unit(i);
-    serverPeer = ncCreatePeer(server);
+    serverPeer = ncCreatePeer(serverAuth);
     
     /* init client */
-    client = ncCreateServer(protocol);
-    clientPeer = ncCreatePeer(client);
+    clientAuth = ncCreateAuthority(protocol);
+    clientPeer = ncCreatePeer(clientAuth);
     if (glfwInit() != GL_TRUE) error("glfwInit() failed.");
 	win = glfwCreateWindow(1280, 720, "Simple Game", NULL, NULL);
 	if (!win) error("glfwCreateWindow(...) failed.");
@@ -125,7 +125,7 @@ int main(int argc, char * argv[])
             ncSetObjectInt(units[i].object, yField, (int)units[i].y);
             ncSetVisibility(serverPeer, units[i].object, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
         }
-        ncPublishFrame(server);
+        ncPublishFrame(serverAuth);
 
         /* simulate network traffic */
         updateBlob = ncProduceMessage(serverPeer);

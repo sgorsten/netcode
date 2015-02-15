@@ -42,22 +42,18 @@ namespace netcode
     static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->fields); }
     static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->classes); }
     static size_t MemUsage(const NCobject * obj) { return sizeof(NCobject); }
-    static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs); }
+    static size_t MemUsage(const NCclient & client) { return MemUsage(client.frames); }
+    static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs) + MemUsage(peer->client); }
     static size_t MemUsage(const NCview * peer) { return sizeof(NCview); }
     static size_t MemUsage(const ClientFrame & f) { return MemUsage(f.views) + MemUsage(f.state) + MemUsage(f.distribs); }
 }
 
 using namespace netcode;
 
-int ncxServerMemoryUsage(NCserver * server)
+int ncxGetMemoryUsage(NCauthority * authority)
 {
-    return sizeof(NCserver) + MemUsage(server->protocol) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
+    return sizeof(NCauthority) + MemUsage(authority->protocol) + MemUsage(authority->objects) + MemUsage(authority->peers) + MemUsage(authority->state) + MemUsage(authority->frameState);
 }
-
-/*int ncxClientMemoryUsage(NCclient * client)
-{
-    return sizeof(NCclient) + MemUsage(client->protocol) + MemUsage(client->frames);
-}*/
 
 void ncxPrintCodeEfficiency (struct NCpeer * peer)
 {

@@ -14,12 +14,12 @@ NCprotocol *    ncCreateProtocol  (int maxFrameDelta)                           
 NCclass *       ncCreateClass     (NCprotocol * protocol)                                   { return new NCclass(protocol); }
 NCint *         ncCreateInt       (NCclass * cl)                                            { return new NCint(cl); }
 
-NCserver *      ncCreateServer    (const NCprotocol * protocol)                             { return new NCserver(protocol); }
+NCauthority *   ncCreateAuthority (const NCprotocol * protocol)                             { return new NCauthority(protocol); }
 
-NCpeer *        ncCreatePeer      (NCserver * server)                                       { return server->CreatePeer(); }
-NCobject *      ncCreateObject    (NCserver * server, const NCclass * cl)                   { return server->CreateObject(cl); }
-void            ncPublishFrame    (NCserver * server)                                       { return server->PublishFrame(); }
-void            ncDestroyServer   (NCserver * server)                                       { delete server; }
+NCpeer *        ncCreatePeer      (NCauthority * authority)                                 { return authority->CreatePeer(); }
+NCobject *      ncCreateObject    (NCauthority * authority, const NCclass * cl)             { return authority->CreateObject(cl); }
+void            ncPublishFrame    (NCauthority * authority)                                 { return authority->PublishFrame(); }
+void            ncDestroyAuthority(NCauthority * authority)                                 { delete authority; }
 
 int             ncGetViewCount    (const NCpeer * peer)                                     { return peer->client.frames.empty() ? 0 : peer->client.frames.rbegin()->second.views.size(); }
 const NCview *  ncGetView         (const NCpeer * peer, int index)                          { return peer->client.frames.rbegin()->second.views[index].get(); }

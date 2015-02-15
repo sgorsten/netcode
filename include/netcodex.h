@@ -16,7 +16,7 @@ extern "C" {
 
 void ncxPrintCodeEfficiency (NCpeer * client);
 
-int ncxServerMemoryUsage (NCserver * server);
+int ncxServerMemoryUsage (NCauthority * auth);
 
 #ifdef __cplusplus
 }
