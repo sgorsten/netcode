@@ -54,13 +54,14 @@ int ncxServerMemoryUsage(NCserver * server)
     return sizeof(NCserver) + MemUsage(server->protocol) + MemUsage(server->objects) + MemUsage(server->peers) + MemUsage(server->state) + MemUsage(server->frameState);
 }
 
-int ncxClientMemoryUsage(NCclient * client)
+/*int ncxClientMemoryUsage(NCclient * client)
 {
     return sizeof(NCclient) + MemUsage(client->protocol) + MemUsage(client->frames);
-}
+}*/
 
-void ncxPrintClientCodeEfficiency (struct NCclient * client)
+void ncxPrintCodeEfficiency (struct NCpeer * peer)
 {
+    auto client = &peer->client;
     auto it = client->frames.rbegin();
     if(it == client->frames.rend()) return;
     const auto & distribs = it->second.distribs;

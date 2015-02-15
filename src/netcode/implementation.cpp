@@ -15,26 +15,19 @@ NCclass *       ncCreateClass     (NCprotocol * protocol)                       
 NCint *         ncCreateInt       (NCclass * cl)                                            { return new NCint(cl); }
 
 NCserver *      ncCreateServer    (const NCprotocol * protocol)                             { return new NCserver(protocol); }
-NCclient *      ncCreateClient    (const NCprotocol * protocol)                             { return new NCclient(protocol); }
 
 NCpeer *        ncCreatePeer      (NCserver * server)                                       { return server->CreatePeer(); }
 NCobject *      ncCreateObject    (NCserver * server, const NCclass * cl)                   { return server->CreateObject(cl); }
 void            ncPublishFrame    (NCserver * server)                                       { return server->PublishFrame(); }
 void            ncDestroyServer   (NCserver * server)                                       { delete server; }
 
+int             ncGetViewCount    (const NCpeer * peer)                                     { return peer->client.frames.empty() ? 0 : peer->client.frames.rbegin()->second.views.size(); }
+const NCview *  ncGetView         (const NCpeer * peer, int index)                          { return peer->client.frames.rbegin()->second.views[index].get(); }
 void            ncSetVisibility   (NCpeer * peer, const NCobject * object, int isVisible)   { peer->SetVisibility(object, !!isVisible); }
-NCblob *        ncProduceUpdate   (NCpeer * peer)                                           { return new NCblob{peer->ProduceUpdate()}; }
-void            ncConsumeResponse (NCpeer * peer, const void * data, int size)              { peer->ConsumeResponse(reinterpret_cast<const uint8_t *>(data), size); }
 void            ncDestroyPeer     (NCpeer * peer)                                           { delete peer; }
 
 void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
 void            ncDestroyObject   (NCobject * object)                                       { delete object; }
-
-int             ncGetViewCount    (const NCclient * client)                                 { return client->frames.empty() ? 0 : client->frames.rbegin()->second.views.size(); }
-const NCview *  ncGetView         (const NCclient * client, int index)                      { return client->frames.rbegin()->second.views[index].get(); }
-void            ncConsumeUpdate   (NCclient * client, const void * data, int size)          { client->ConsumeUpdate(reinterpret_cast<const uint8_t *>(data), size); }
-NCblob *        ncProduceResponse (NCclient * client)                                       { return new NCblob{client->ProduceResponse()}; }
-void            ncDestroyClient   (NCclient * client)                                       { delete client; }
 
 const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->cl; }
 int             ncGetViewInt      (const NCview * view, const NCint * field)                { return view->GetIntField(field); }
@@ -43,3 +36,22 @@ const void *    ncGetBlobData     (const NCblob * blob)                         
 int             ncGetBlobSize     (const NCblob * blob)                                     { return blob->memory.size(); }
 void            ncFreeBlob        (NCblob * blob)                                           { delete blob; }
 
+NCblob * ncProduceMessage(NCpeer * peer)
+{ 
+    auto response = peer->client.ProduceResponse();
+    auto update = peer->ProduceUpdate();
+    auto blob = new NCblob;
+    blob->memory.resize(2);
+    *reinterpret_cast<uint16_t *>(blob->memory.data()) = response.size();
+    blob->memory.insert(end(blob->memory), begin(response), end(response));
+    blob->memory.insert(end(blob->memory), begin(update), end(update));
+    return blob;
+}
+
+void ncConsumeMessage(NCpeer * peer, const void * data, int size)
+{ 
+    auto bytes = reinterpret_cast<const uint8_t *>(data);
+    auto responseSize = *reinterpret_cast<const uint16_t *>(data);
+    peer->ConsumeResponse(bytes + 2, responseSize);
+    peer->client.ConsumeUpdate(bytes + 2 + responseSize, size - 2 - responseSize);
+}

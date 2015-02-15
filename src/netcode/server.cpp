@@ -65,7 +65,7 @@ void NCserver::PublishFrame()
 // NCpeer //
 ////////////
 
-NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
+NCpeer::NCpeer(NCserver * server) : server(server), nextId(1), client(server->protocol)
 {
 
 }

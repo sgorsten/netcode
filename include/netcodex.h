@@ -14,10 +14,9 @@ extern "C" {
 
 #include <netcode.h>
 
-void ncxPrintClientCodeEfficiency (NCclient * client);
+void ncxPrintCodeEfficiency (NCpeer * client);
 
 int ncxServerMemoryUsage (NCserver * server);
-int ncxClientMemoryUsage (NCclient * client);
 
 #ifdef __cplusplus
 }

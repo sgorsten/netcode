@@ -8,7 +8,7 @@
 #ifndef NETCODE_SERVER_H
 #define NETCODE_SERVER_H
 
-#include "protocol.h"
+#include "client.h"
 
 #include <map>
 
@@ -51,6 +51,8 @@ struct NCpeer
     std::map<int, netcode::Distribs> frameDistribs;
     std::vector<int> ackFrames;
     int nextId;
+
+    NCclient client;
 
     NCpeer(NCserver * server);
     ~NCpeer();
