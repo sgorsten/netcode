@@ -8,6 +8,7 @@
 #ifndef NETCODE_CLIENT_H
 #define NETCODE_CLIENT_H
 
+#include "utility.h"
 #include "protocol.h"
 
 #include <memory>

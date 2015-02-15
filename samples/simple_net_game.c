@@ -108,7 +108,7 @@ struct Peer
 struct Server
 {
     struct Unit units[20];
-    NCserver * nserver;
+    NCauthority * auth;
     NCobject * nteams[2];
 
     SOCKET serverSocket;
@@ -122,7 +122,7 @@ void SpawnUnit(struct Server * s, int i)
     s->units[i].hp = 100;
     s->units[i].x = (float)(rand() % (WINDOW_WIDTH/4) + s->units[i].team * (WINDOW_WIDTH*3/4));
     s->units[i].y = (float)(rand() % WINDOW_HEIGHT);
-    s->units[i].nobj = ncCreateObject(s->nserver, unitClass);
+    s->units[i].nobj = ncCreateObject(s->auth, unitClass);
 }
 
 struct Server * CreateServer(int port)
@@ -141,11 +141,11 @@ struct Server * CreateServer(int port)
     serverAddr.sin_port = htons(port);
     if(bind(s->serverSocket, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) error("bind(...) failed.");
 
-    s->nserver = ncCreateServer(protocol);
+    s->auth = ncCreateAuthority(protocol);
 
     for(i=0; i<2; ++i)
     {
-        s->nteams[i] = ncCreateObject(s->nserver, teamClass);
+        s->nteams[i] = ncCreateObject(s->auth, teamClass);
         ncSetObjectInt(s->nteams[i], teamId, i);
     }
 
@@ -184,15 +184,15 @@ void UpdateServer(struct Server * s, float timestep)
         {
             if(remoteAddr.sin_addr.S_un.S_addr == s->peers[i].addr.sin_addr.S_un.S_addr && remoteAddr.sin_port == s->peers[i].addr.sin_port)
             {
-                ncConsumeResponse(s->peers[i].npeer, buffer, len);
+                ncConsumeMessage(s->peers[i].npeer, buffer, len);
                 break;
             }
         }
         if(i == s->numPeers && i < MAX_PEERS)
         {
-            s->peers[i].npeer = ncCreatePeer(s->nserver);
+            s->peers[i].npeer = ncCreatePeer(s->auth);
             ncSetVisibility(s->peers[i].npeer, s->nteams[i%2], 1);
-            ncConsumeResponse(s->peers[i].npeer, buffer, len);
+            ncConsumeMessage(s->peers[i].npeer, buffer, len);
             s->peers[i].addr = remoteAddr;
             ++s->numPeers;
         }
@@ -266,12 +266,12 @@ void UpdateServer(struct Server * s, float timestep)
             ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, s->units[i].team == j%2 || isVisible);
         }
     }
-    ncPublishFrame(s->nserver);
+    ncPublishFrame(s->auth);
 
     /* send updates to peers */
     for(j=0; j<s->numPeers; ++j) 
     {
-        NCblob * nupdate = ncProduceUpdate(s->peers[j].npeer);
+        NCblob * nupdate = ncProduceMessage(s->peers[j].npeer);
         sendto(s->serverSocket, (const char *)ncGetBlobData(nupdate), ncGetBlobSize(nupdate), 0, (const SOCKADDR *)&s->peers[j].addr, sizeof(s->peers[j].addr));
         ncFreeBlob(nupdate);
     }
@@ -285,7 +285,8 @@ struct Client
 {
     SOCKET clientSocket;
     SOCKADDR_IN serverAddr;
-    NCclient * nclient;
+    NCauthority * auth;
+    NCpeer * peer;
     GLFWwindow * win;
     int team;
 };
@@ -304,7 +305,8 @@ struct Client * CreateClient(const char * ip, int port)
     c->serverAddr.sin_addr.s_addr = inet_addr(ip);
     c->serverAddr.sin_port = htons(port);
 
-    c->nclient = ncCreateClient(protocol);
+    c->auth = ncCreateAuthority(protocol);
+    c->peer = ncCreatePeer(c->auth);
 	c->win = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Simple Game", NULL, NULL);
 	if (!c->win) error("glfwCreateWindow(...) failed.");
 	glfwMakeContextCurrent(c->win);
@@ -315,7 +317,7 @@ struct Client * CreateClient(const char * ip, int port)
 void DestroyClient(struct Client * c)
 {
     closesocket(c->clientSocket);
-    ncxPrintClientCodeEfficiency(c->nclient);
+    ncxPrintCodeEfficiency(c->peer);
     free(c);
 }
 
@@ -357,16 +359,19 @@ void UpdateClient(struct Client * c)
         int remoteLen = sizeof(remoteAddr);
         int len = recvfrom(c->clientSocket, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
         if(len == SOCKET_ERROR) error("recvfrom(...) failed.");
-        ncConsumeUpdate(c->nclient, buffer, len);
+        ncConsumeMessage(c->peer, buffer, len);
     }
 
-    NCblob * nresponse = ncProduceResponse(c->nclient);
+    /* TODO: account for any user input */
+    ncPublishFrame(c->auth);
+
+    NCblob * nresponse = ncProduceMessage(c->peer);
     sendto(c->clientSocket, (const char *)ncGetBlobData(nresponse), ncGetBlobSize(nresponse), 0, (const SOCKADDR *)&c->serverAddr, sizeof(c->serverAddr));
 
     /* determine team */
-    for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
+    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->peer, i);
         if(ncGetViewClass(nview) == teamClass) c->team = ncGetViewInt(nview, teamId);
     }
 
@@ -377,9 +382,9 @@ void UpdateClient(struct Client * c)
 
     /* draw unit visibility */
     glColor3f(0.5f,0.3f,0.1f);
-    for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
+    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->peer, i);
         if(ncGetViewClass(nview) == unitClass && ncGetViewInt(nview, unitTeamId) == c->team)
         {
             DrawCircle(ncGetViewInt(nview, unitX), ncGetViewInt(nview, unitY), 120);
@@ -387,9 +392,9 @@ void UpdateClient(struct Client * c)
     }
 
     /* draw units */
-    for(i=0, n=ncGetViewCount(c->nclient); i<n; ++i)
+    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->nclient, i);
+        const NCview * nview = ncGetView(c->peer, i);
         if(ncGetViewClass(nview) == unitClass)
         {
             /* draw colored circle to represent unit */

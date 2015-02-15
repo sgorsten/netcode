@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "simple_net_game", "simple_n
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "netcode_tests", "netcode_tests\netcode_tests.vcxproj", "{F56B6AB2-DD56-414C-82E6-58E1441C59E1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "simple_input", "simple_input\simple_input.vcxproj", "{A501AFB4-261E-455D-8433-44C6DEA37289}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -53,6 +55,14 @@ Global
 		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|Win32.Build.0 = Release|Win32
 		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.ActiveCfg = Release|x64
 		{F56B6AB2-DD56-414C-82E6-58E1441C59E1}.Release|x64.Build.0 = Release|x64
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Debug|Win32.Build.0 = Debug|Win32
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Debug|x64.ActiveCfg = Debug|x64
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Debug|x64.Build.0 = Debug|x64
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Release|Win32.ActiveCfg = Release|Win32
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Release|Win32.Build.0 = Release|Win32
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Release|x64.ActiveCfg = Release|x64
+		{A501AFB4-261E-455D-8433-44C6DEA37289}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -60,5 +70,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{633B0956-1D5A-472F-B507-2276FA597966} = {46A61218-6663-4E26-A1E4-2403DE727BBA}
 		{50512947-C72B-42DF-A0A2-226D36DF7567} = {46A61218-6663-4E26-A1E4-2403DE727BBA}
+		{A501AFB4-261E-455D-8433-44C6DEA37289} = {46A61218-6663-4E26-A1E4-2403DE727BBA}
 	EndGlobalSection
 EndGlobal

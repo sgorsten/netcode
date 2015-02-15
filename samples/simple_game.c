@@ -24,11 +24,12 @@ struct Unit
     float x, y;
     NCobject * object;
 } units[20];
-NCserver * server;
-NCpeer * peer;
+NCauthority * serverAuth;
+NCpeer * serverPeer;
 
 /* Client state */
-NCclient * client;
+NCauthority * clientAuth;
+NCpeer * clientPeer;
 GLFWwindow * win;
 
 void error(const char * message)
@@ -43,7 +44,7 @@ void spawn_unit(int i)
     units[i].hp = 100;
     units[i].x = (float)(rand() % 320 + units[i].team * 960);
     units[i].y = (float)(rand() % 720);
-    units[i].object = ncCreateObject(server, unitClass);
+    units[i].object = ncCreateObject(serverAuth, unitClass);
 }
 
 int main(int argc, char * argv[])
@@ -60,12 +61,13 @@ int main(int argc, char * argv[])
     yField = ncCreateInt(unitClass);
 
     /* init server */
-    server = ncCreateServer(protocol);
+    serverAuth = ncCreateAuthority(protocol);
     for(i=0; i<20; ++i) spawn_unit(i);
-    peer = ncCreatePeer(server);
+    serverPeer = ncCreatePeer(serverAuth);
     
     /* init client */
-    client = ncCreateClient(protocol);
+    clientAuth = ncCreateAuthority(protocol);
+    clientPeer = ncCreatePeer(clientAuth);
     if (glfwInit() != GL_TRUE) error("glfwInit() failed.");
 	win = glfwCreateWindow(1280, 720, "Simple Game", NULL, NULL);
 	if (!win) error("glfwCreateWindow(...) failed.");
@@ -121,20 +123,21 @@ int main(int argc, char * argv[])
             ncSetObjectInt(units[i].object, hpField, units[i].hp);
             ncSetObjectInt(units[i].object, xField, (int)units[i].x);
             ncSetObjectInt(units[i].object, yField, (int)units[i].y);
-            ncSetVisibility(peer, units[i].object, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
+            ncSetVisibility(serverPeer, units[i].object, 1); /* for now, all units are always visible, but we could implement a "fog of war" by manipulating this */
         }
-        ncPublishFrame(server);
+        ncPublishFrame(serverAuth);
 
         /* simulate network traffic */
-        updateBlob = ncProduceUpdate(peer);
+        updateBlob = ncProduceMessage(serverPeer);
         if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from server to client via UDP */
         {
-            ncConsumeUpdate(client, ncGetBlobData(updateBlob), ncGetBlobSize(updateBlob));
-
-            responseBlob = ncProduceResponse(client);
+            ncConsumeMessage(clientPeer, ncGetBlobData(updateBlob), ncGetBlobSize(updateBlob));
+            
+            ncPublishFrame(clientAuth);
+            responseBlob = ncProduceMessage(clientPeer);
             if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from client to server via UDP */
             {
-                ncConsumeResponse(peer, ncGetBlobData(responseBlob), ncGetBlobSize(responseBlob));
+                ncConsumeMessage(serverPeer, ncGetBlobData(responseBlob), ncGetBlobSize(responseBlob));
             }
             ncFreeBlob(responseBlob);
         }
@@ -145,9 +148,9 @@ int main(int argc, char * argv[])
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
-        for(i=0, n=ncGetViewCount(client); i<n; ++i)
+        for(i=0, n=ncGetViewCount(clientPeer); i<n; ++i)
         {
-            view = ncGetView(client, i);
+            view = ncGetView(clientPeer, i);
             if(ncGetViewClass(view) == unitClass)
             {
                 /* draw colored circle to represent unit */
@@ -188,7 +191,7 @@ int main(int argc, char * argv[])
         glfwPollEvents();
 	}
 
-    ncxPrintClientCodeEfficiency(client);
+    ncxPrintCodeEfficiency(clientPeer);
 
 	glfwDestroyWindow(win);
 	glfwTerminate();

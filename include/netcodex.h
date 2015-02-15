@@ -14,10 +14,11 @@ extern "C" {
 
 #include <netcode.h>
 
-void ncxPrintClientCodeEfficiency (NCclient * client);
+void ncxPrintFrameset (NCpeer * peer, const char * label);
 
-int ncxServerMemoryUsage (NCserver * server);
-int ncxClientMemoryUsage (NCclient * client);
+void ncxPrintCodeEfficiency (NCpeer * peer);
+
+int ncxServerMemoryUsage (NCauthority * auth);
 
 #ifdef __cplusplus
 }

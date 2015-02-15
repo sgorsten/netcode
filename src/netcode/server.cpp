@@ -9,33 +9,33 @@
 
 using namespace netcode;
 
-NCserver::NCserver(const NCprotocol * protocol) : protocol(protocol), frame()
+NCauthority::NCauthority(const NCprotocol * protocol) : protocol(protocol), frame()
 {
 
 }
 
-NCserver::~NCserver()
+NCauthority::~NCauthority()
 {
-    // If there are any outstanding peers, remove any references they have to objects or to the server
+    // If there are any outstanding peers, remove any references they have to objects or to the authority
     for(auto peer : peers)
     {
         peer->visChanges.clear();
         peer->records.clear();
-        peer->server = nullptr;
+        peer->auth = nullptr;
     }
 
-    // If there are any outstanding objects, remove their reference to the server
-    for(auto object : objects) object->server = nullptr;
+    // If there are any outstanding objects, remove their reference to the authority
+    for(auto object : objects) object->auth = nullptr;
 }
 
-NCpeer * NCserver::CreatePeer()
+NCpeer * NCauthority::CreatePeer()
 {
 	auto peer = new NCpeer(this);
 	peers.push_back(peer);
 	return peer;    
 }
 
-NCobject * NCserver::CreateObject(const NCclass * cl)
+NCobject * NCauthority::CreateObject(const NCclass * cl)
 {
     if(cl->protocol != protocol) return nullptr;
 
@@ -45,7 +45,7 @@ NCobject * NCserver::CreateObject(const NCclass * cl)
 	return object;
 }
 
-void NCserver::PublishFrame()
+void NCauthority::PublishFrame()
 {
     ++frame;
     frameState[frame] = state;
@@ -65,23 +65,23 @@ void NCserver::PublishFrame()
 // NCpeer //
 ////////////
 
-NCpeer::NCpeer(NCserver * server) : server(server), nextId(1)
+NCpeer::NCpeer(NCauthority * auth) : auth(auth), nextId(1), client(auth->protocol)
 {
 
 }
 
 NCpeer::~NCpeer()
 {
-    if(server)
+    if(auth)
     {
-        auto it = std::find(begin(server->peers), end(server->peers), this);
-        if(it != end(server->peers)) server->peers.erase(it);
+        auto it = std::find(begin(auth->peers), end(auth->peers), this);
+        if(it != end(auth->peers)) auth->peers.erase(it);
     }
 }
 
 void NCpeer::OnPublishFrame(int frame)
 {
-    if(!server) return;
+    if(!auth) return;
 
     for(auto change : visChanges)
     {
@@ -93,20 +93,20 @@ void NCpeer::OnPublishFrame(int frame)
     visChanges.clear();
 
     int oldestAck = GetOldestAckFrame();
-    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < server->frame - server->protocol->maxFrameDelta; });
-    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(server->frame - server->protocol->maxFrameDelta, oldestAck)));
+    EraseIf(records, [=](ObjectRecord & r) { return r.frameRemoved < oldestAck || r.frameRemoved < auth->frame - auth->protocol->maxFrameDelta; });
+    frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(auth->frame - auth->protocol->maxFrameDelta, oldestAck)));
 }
 
 void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 {
-    if(!server) return;
+    if(!auth) return;
     visChanges.push_back({object,setVisible});
 }
 
 std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
-    if(!server) return {};
-    int32_t frame = server->frame, cutoff = frame - server->protocol->maxFrameDelta;
+    if(!auth) return {};
+    int32_t frame = auth->frame, cutoff = frame - auth->protocol->maxFrameDelta;
     int32_t prevFrames[4];
     for(size_t i=0; i<4; ++i)
     {
@@ -126,11 +126,11 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
     // Prepare arithmetic code for this frame
 	ArithmeticEncoder encoder(bytes);
-    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, server->protocol->maxFrameDelta+1);
+    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, auth->protocol->maxFrameDelta+1);
 
     auto & distribs = frameDistribs[frame];
     if(prevFrames[0] != 0) distribs = frameDistribs[prevFrames[0]];
-    else distribs = Distribs(*server->protocol);
+    else distribs = Distribs(*auth->protocol);
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -160,9 +160,9 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
     }
 
-    auto state = server->GetFrameState(frame);
+    auto state = auth->GetFrameState(frame);
     const uint8_t * prevStates[4];
-    for(int i=0; i<4; ++i) prevStates[i] = server->GetFrameState(prevFrames[i]);
+    for(int i=0; i<4; ++i) prevStates[i] = auth->GetFrameState(prevFrames[i]);
 
 	// Encode updates for each view
     for(const auto & record : records)
@@ -196,7 +196,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
 void NCpeer::ConsumeResponse(const uint8_t * data, size_t size) 
 {
-    if(!server) return;
+    if(!auth) return;
     std::vector<int> newAck;
     while(size >= 4)
     {
@@ -214,24 +214,24 @@ void NCpeer::ConsumeResponse(const uint8_t * data, size_t size)
 // NCobject //
 //////////////
 
-NCobject::NCobject(NCserver * server, const NCclass * cl, int stateOffset) : server(server), cl(cl), stateOffset(stateOffset)
+NCobject::NCobject(NCauthority * auth, const NCclass * cl, int stateOffset) : auth(auth), cl(cl), stateOffset(stateOffset)
 {
     
 }
 
 NCobject::~NCobject()
 {
-    if(server)
+    if(auth)
     {
-        server->stateAlloc.Free(stateOffset, cl->sizeInBytes);
-        for(auto peer : server->peers) peer->SetVisibility(this, false);
-        auto it = std::find(begin(server->objects), end(server->objects), this);
-        if(it != end(server->objects)) server->objects.erase(it);
+        auth->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+        for(auto peer : auth->peers) peer->SetVisibility(this, false);
+        auto it = std::find(begin(auth->objects), end(auth->objects), this);
+        if(it != end(auth->objects)) auth->objects.erase(it);
     }
 }
 
 void NCobject::SetIntField(const NCint * field, int value)
 { 
-    if(!server || field->cl != cl) return;
-    reinterpret_cast<int &>(server->state[stateOffset + field->dataOffset]) = value; 
+    if(!auth || field->cl != cl) return;
+    reinterpret_cast<int &>(auth->state[stateOffset + field->dataOffset]) = value; 
 }
