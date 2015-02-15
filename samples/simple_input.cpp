@@ -2,7 +2,45 @@
 #include <GLFW\glfw3.h>
 #include <WinSock2.h>
 #include <cmath>
+#include <tuple>
+#include <vector>
+#include <list>
+#include <map>
 #include <iostream>
+
+bool operator == (const SOCKADDR_IN & a, const SOCKADDR_IN & b) { return std::tie(a.sin_family, a.sin_addr.s_addr, a.sin_port) == std::tie(b.sin_family, b.sin_addr.s_addr, b.sin_port); }
+bool operator != (const SOCKADDR_IN & a, const SOCKADDR_IN & b) { return std::tie(a.sin_family, a.sin_addr.s_addr, a.sin_port) != std::tie(b.sin_family, b.sin_addr.s_addr, b.sin_port); }
+bool operator < (const SOCKADDR_IN & a, const SOCKADDR_IN & b) { return std::tie(a.sin_family, a.sin_addr.s_addr, a.sin_port) < std::tie(b.sin_family, b.sin_addr.s_addr, b.sin_port); }
+
+struct Packet { SOCKADDR_IN addr; std::vector<char> bytes; };
+
+std::vector<Packet> ReceiveAll(SOCKET sock)
+{
+    std::vector<Packet> packets;
+    while(1)
+    {
+        struct timeval tv = {0,0};
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(sock, &fds);
+        if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) throw std::runtime_error("select(...) failed.");
+        if(!FD_ISSET(sock, &fds)) return packets;
+
+        char buffer[2000];
+        SOCKADDR_IN remoteAddr;
+        int remoteLen = sizeof(remoteAddr);
+        int len = recvfrom(sock, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
+        if(len == SOCKET_ERROR) throw std::runtime_error("recvfrom(...) failed.");
+        packets.push_back({remoteAddr, {buffer,buffer+len}});
+    }
+}
+
+void SendPeerMessage(NCpeer * peer, SOCKET sock, const SOCKADDR_IN & addr)
+{
+    auto message = ncProduceMessage(peer);
+    sendto(sock, (const char *)ncGetBlobData(message), ncGetBlobSize(message), 0, (const SOCKADDR *)&addr, sizeof(addr));
+    ncFreeBlob(message);
+}
 
 struct Protocol
 {
@@ -27,15 +65,23 @@ struct Protocol
 
 struct Server
 {
+    struct Character
+    {
+        NCobject * object;
+        float posX,posY,targetX,targetY;
+    };
+
+    struct Peer
+    {
+        NCpeer * peer;
+        Character * player;
+    };
+
     const Protocol & protocol;
     NCauthority * auth;
-    NCobject * player;
-    NCpeer * peer;
-    
+    std::list<Character> chars;
+    std::map<SOCKADDR_IN, Peer> peers;
     SOCKET sock;
-    SOCKADDR_IN clientAddr;
-
-    float posX,posY, targetX,targetY;
 
     Server(const Protocol & protocol) : protocol(protocol)
     {
@@ -48,78 +94,75 @@ struct Server
         addr.sin_port = htons(12345);
         if(bind(sock, (SOCKADDR *)&addr, sizeof(addr)) == SOCKET_ERROR) throw std::runtime_error("bind(...) failed.");
 
-        posX=targetX=320;
-        posY=targetY=240;
-
         auth = ncCreateAuthority(protocol.protocol);
-        player = ncCreateObject(auth, protocol.characterCl);
-    
-        peer = ncCreatePeer(auth);
-        ncSetVisibility(peer, player, 1);
-
-        clientAddr = {};
     }
 
     void Update(float timestep)
     {
-        // Consume any incoming messages
-        while(1)
+        for(auto packet : ReceiveAll(sock))
         {
-            struct timeval tv = {0,0};
-            fd_set fds;
-            FD_ZERO(&fds);
-            FD_SET(sock, &fds);
-            if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) throw std::runtime_error("select(...) failed.");
-            if(!FD_ISSET(sock, &fds)) break;
+            if(peers.find(packet.addr) == end(peers))
+            {
+                auto & newPeer = peers[packet.addr];
+                newPeer.peer = ncCreatePeer(auth);
 
-            char buffer[2000];
-            SOCKADDR_IN remoteAddr;
-            int remoteLen = sizeof(remoteAddr);
-            int len = recvfrom(sock, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
-            if(len == SOCKET_ERROR) throw std::runtime_error("recvfrom(...) failed.");
-            clientAddr = remoteAddr;
-            ncConsumeMessage(peer, buffer, len);
+                chars.push_back({});
+                auto & newChar = chars.back();
+                newChar.object = ncCreateObject(auth, protocol.characterCl);
+                newChar.posX = newChar.targetX = 320;
+                newChar.posY = newChar.targetY = 240;
+                newPeer.player = &newChar;
+            }
+
+            ncConsumeMessage(peers[packet.addr].peer, packet.bytes.data(), packet.bytes.size());
         }
 
         // Handle user input
-        for(int i=0, n=ncGetViewCount(peer); i<n; ++i)
+        for(auto & p : peers)
         {
-            auto view = ncGetView(peer, i);
-            if(ncGetViewClass(view) == protocol.inputCl)
+            auto & peer = p.second;
+            for(int i=0, n=ncGetViewCount(peer.peer); i<n; ++i)
             {
-                targetX = static_cast<float>(ncGetViewInt(view, protocol.inputTargetX));
-                targetY = static_cast<float>(ncGetViewInt(view, protocol.inputTargetY));
+                auto view = ncGetView(peer.peer, i);
+                if(ncGetViewClass(view) == protocol.inputCl)
+                {
+                    peer.player->targetX = static_cast<float>(ncGetViewInt(view, protocol.inputTargetX));
+                    peer.player->targetY = static_cast<float>(ncGetViewInt(view, protocol.inputTargetY));
+                }
             }
         }
 
         // Update game state
         if(timestep > 0)
         {
-            float maxDist = timestep * 200;
-            float dx = targetX - posX, dy = targetY - posY;
-            float len = sqrtf(dx*dx + dy*dy);
-            if(len < maxDist)
+            for(auto & c : chars)
             {
-                posX = targetX;
-                posY = targetY;
-            }
-            else
-            {
-                posX += dx*maxDist/len;
-                posY += dy*maxDist/len;
-            }        
+                float maxDist = timestep * 200;
+                float dx = c.targetX - c.posX, dy = c.targetY - c.posY;
+                float len = sqrtf(dx*dx + dy*dy);
+                if(len < maxDist)
+                {
+                    c.posX = c.targetX;
+                    c.posY = c.targetY;
+                }
+                else
+                {
+                    c.posX += dx*maxDist/len;
+                    c.posY += dy*maxDist/len;
+                }        
 
-            ncSetObjectInt(player, protocol.characterPosX, static_cast<int>(posX));
-            ncSetObjectInt(player, protocol.characterPosY, static_cast<int>(posY));
+                ncSetObjectInt(c.object, protocol.characterPosX, static_cast<int>(c.posX));
+                ncSetObjectInt(c.object, protocol.characterPosY, static_cast<int>(c.posY));
+
+                for(auto & p : peers) ncSetVisibility(p.second.peer, c.object, 1);
+            }
             ncPublishFrame(auth);
+        }
 
-            // Send a message to the client
-            if(clientAddr.sin_addr.s_addr != 0)
-            {
-                auto message = ncProduceMessage(peer);
-                sendto(sock, (const char *)ncGetBlobData(message), ncGetBlobSize(message), 0, (const SOCKADDR *)&clientAddr, sizeof(clientAddr));
-                ncFreeBlob(message);
-            }
+        // Send a message to the clients
+        for(auto & p : peers)
+        {
+            SendPeerMessage(p.second.peer, sock, p.first);
         }
     }
 };
@@ -154,22 +197,10 @@ struct Client
 
     void Update(GLFWwindow * win)
     {
-        // Consume any incoming messages
-        while(1)
+        for(auto packet : ReceiveAll(sock))
         {
-            struct timeval tv = {0,0};
-            fd_set fds;
-            FD_ZERO(&fds);
-            FD_SET(sock, &fds);
-            if(select(1, &fds, NULL, NULL, &tv) == SOCKET_ERROR) throw std::runtime_error("select(...) failed.");
-            if(!FD_ISSET(sock, &fds)) break;
-
-            char buffer[2000];
-            SOCKADDR_IN remoteAddr;
-            int remoteLen = sizeof(remoteAddr);
-            int len = recvfrom(sock, buffer, sizeof(buffer), 0, (SOCKADDR *)&remoteAddr, &remoteLen);
-            if(len == SOCKET_ERROR) throw std::runtime_error("recvfrom(...) failed.");
-            ncConsumeMessage(peer, buffer, len);
+            if(packet.addr != addr) continue;
+            ncConsumeMessage(peer, packet.bytes.data(), packet.bytes.size());
         }
 
         // Render client-side views of server-side objects
@@ -207,9 +238,7 @@ struct Client
         ncPublishFrame(auth);
 
         // Send a message to the server
-        auto message = ncProduceMessage(peer);
-        sendto(sock, (const char *)ncGetBlobData(message), ncGetBlobSize(message), 0, (const SOCKADDR *)&addr, sizeof(addr));
-        ncFreeBlob(message);
+        SendPeerMessage(peer, sock, addr);
     }
 };
 
