@@ -92,6 +92,41 @@ void NCobject::SetIntField(const NCint * field, int value)
 // Client //
 ////////////
 
+struct Frameset
+{
+    int32_t frame, prevFrames[4];
+    CurvePredictor predictors[5];
+
+    void RefreshPredictors()
+    {
+        predictors[0] = CurvePredictor();
+        predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
+        predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
+        predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
+        predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
+    }
+
+    void Decode(ArithmeticDecoder & decoder, const NCprotocol & protocol)
+    {
+        frame = DecodeBits(decoder, 32);
+        for(int i=0; i<4; ++i)
+        {
+            code_t value = DecodeUniform(decoder, protocol.maxFrameDelta+1);
+            prevFrames[i] = value ? frame - value : 0;
+        }
+        RefreshPredictors();
+    }
+
+    void Encode(ArithmeticEncoder & encoder, const NCprotocol & protocol)
+    {
+        EncodeBits(encoder, frame, 32);
+        for(int i=0; i<4; ++i)
+        {
+            code_t value = prevFrames[i] ? frame - prevFrames[i] : 0;
+            EncodeUniform(encoder, value, protocol.maxFrameDelta+1);
+        }
+    }
+};
 
 Client::Client(const NCprotocol * protocol) : protocol(protocol)
 {
@@ -119,36 +154,26 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
 void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
     if(bufferSize < 4) return;
-    int32_t frame, prevFrames[4];
     const uint8_t * prevStates[4];
 
-    // Don't bother decoding messages for old frames (TODO: We may still want to decode these frames if they can improve our ack set)
-    memcpy(&frame, buffer + 0, sizeof(int32_t));
-    if(!frames.empty() && frames.rbegin()->first >= frame) return;
-
-    // Prepare arithmetic code for this frame
-	std::vector<uint8_t> bytes(buffer + 4, buffer + bufferSize);
+	std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
 	ArithmeticDecoder decoder(bytes);
+
+    Frameset frameset;
+    frameset.Decode(decoder, *protocol);
+    if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
     for(int i=0; i<4; ++i)
     {
-        prevFrames[i] = DecodeUniform(decoder, protocol->maxFrameDelta+1);
-        if(prevFrames[i]) prevFrames[i] = frame - prevFrames[i];
-        prevStates[i] = GetFrameState(prevFrames[i]);
-        if(prevFrames[i] != 0 && prevStates[i] == nullptr) return; // Malformed packet
+        prevStates[i] = GetFrameState(frameset.prevFrames[i]);
+        if(frameset.prevFrames[i] != 0 && prevStates[i] == nullptr) return; // Malformed packet
     }
 
-    CurvePredictor predictors[5];
-    predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
-    predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
-    predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
-    predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
-
-    auto & distribs = frames[frame].distribs;
-    auto & views = frames[frame].views;
-    if(prevFrames[0] != 0)
+    auto & distribs = frames[frameset.frame].distribs;
+    auto & views = frames[frameset.frame].views;
+    if(frameset.prevFrames[0] != 0)
     {
-        distribs = frames[prevFrames[0]].distribs;
-        views = frames[prevFrames[0]].views;
+        distribs = frames[frameset.prevFrames[0]].distribs;
+        views = frames[frameset.prevFrames[0]].views;
     }
     else distribs = Distribs(*protocol);
 
@@ -167,10 +192,10 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 	{
         auto classIndex = distribs.classDist.DecodeAndTally(decoder);
         auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
-        views.push_back(CreateView(classIndex, uniqueId, frame));
+        views.push_back(CreateView(classIndex, uniqueId, frameset.frame));
 	}
 
-    auto & state = frames[frame].state;
+    auto & state = frames[frameset.frame].state;
     state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
@@ -179,7 +204,7 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
         int sampleCount = 0;
         for(int i=4; i>0; --i)
         {
-            if(view->IsLive(prevFrames[i-1]))
+            if(view->IsLive(frameset.prevFrames[i-1]))
             {
                 sampleCount = i;
                 break;
@@ -191,12 +216,12 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
             int offset = view->stateOffset + field->dataOffset;
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
+            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, frameset.predictors, sampleCount);
 		}
 	}
 
     // Server will never again refer to frames before this point
-    frames.erase(begin(frames), frames.lower_bound(std::min(frame - protocol->maxFrameDelta, prevFrames[3])));
+    frames.erase(begin(frames), frames.lower_bound(std::min(frameset.frame - protocol->maxFrameDelta, frameset.prevFrames[3])));
     for(auto it = id2View.begin(); it != end(id2View); )
     {
         if(it->second.expired()) it = id2View.erase(it);
@@ -262,30 +287,25 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 std::vector<uint8_t> NCpeer::ProduceUpdate()
 {
     if(!auth) return {};
-    int32_t frame = auth->frame, cutoff = frame - auth->protocol->maxFrameDelta;
-    int32_t prevFrames[4];
+
+    Frameset frameset;
+    frameset.frame = auth->frame;
+
+    int32_t cutoff = frameset.frame - auth->protocol->maxFrameDelta;
     for(size_t i=0; i<4; ++i)
     {
-        prevFrames[i] = ackFrames.size() > i ? ackFrames[i] : 0;
-        if(prevFrames[i] < cutoff) prevFrames[i] = 0;
+        frameset.prevFrames[i] = ackFrames.size() > i ? ackFrames[i] : 0;
+        if(frameset.prevFrames[i] < cutoff) frameset.prevFrames[i] = 0;
     }
+    frameset.RefreshPredictors();
 
-    CurvePredictor predictors[5];
-    predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
-    predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
-    predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
-    predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
+    // Encode frameset
+	std::vector<uint8_t> bytes;
+    ArithmeticEncoder encoder(bytes);
+    frameset.Encode(encoder, *auth->protocol);
 
-    // Encode frameset in plain ints, for now
-	std::vector<uint8_t> bytes(4);
-    memcpy(bytes.data() + 0, &frame, sizeof(int32_t));
-
-    // Prepare arithmetic code for this frame
-	ArithmeticEncoder encoder(bytes);
-    for(int i=0; i<4; ++i) EncodeUniform(encoder, prevFrames[i] ? frame - prevFrames[i] : 0, auth->protocol->maxFrameDelta+1);
-
-    auto & distribs = frameDistribs[frame];
-    if(prevFrames[0] != 0) distribs = frameDistribs[prevFrames[0]];
+    auto & distribs = frameDistribs[frameset.frame];
+    if(frameset.prevFrames[0] != 0) distribs = frameDistribs[frameset.prevFrames[0]];
     else distribs = Distribs(*auth->protocol);
 
     // Encode the indices of destroyed objects
@@ -294,12 +314,12 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     int index = 0;
     for(const auto & record : records)
     {
-        if(record.IsLive(prevFrames[0]))
+        if(record.IsLive(frameset.prevFrames[0]))
         {
-            if(!record.IsLive(frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
+            if(!record.IsLive(frameset.frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
             ++index;                                                    // Either way, object was live, so it used an index
         }
-        else if(record.IsLive(frame)) // If object was added between last frame and now
+        else if(record.IsLive(frameset.frame)) // If object was added between last frame and now
         {
             newObjects.push_back(&record);
         }
@@ -316,20 +336,20 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
     }
 
-    auto state = auth->GetFrameState(frame);
+    auto state = auth->GetFrameState(frameset.frame);
     const uint8_t * prevStates[4];
-    for(int i=0; i<4; ++i) prevStates[i] = auth->GetFrameState(prevFrames[i]);
+    for(int i=0; i<4; ++i) prevStates[i] = auth->GetFrameState(frameset.prevFrames[i]);
 
 	// Encode updates for each view
     for(const auto & record : records)
 	{
-        if(!record.IsLive(frame)) continue;
+        if(!record.IsLive(frameset.frame)) continue;
         auto object = record.object;
 
         int sampleCount = 0;
         for(int i=4; i>0; --i)
         {
-            if(record.IsLive(prevFrames[i-1]))
+            if(record.IsLive(frameset.prevFrames[i-1]))
             {
                 sampleCount = i;
                 break;
@@ -342,7 +362,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
             int value = reinterpret_cast<const int &>(state[offset]);
             int prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-			distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, value, prevValues, predictors, sampleCount);
+			distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, value, prevValues, frameset.predictors, sampleCount);
 		}
 	}
 

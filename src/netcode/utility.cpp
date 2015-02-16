@@ -92,7 +92,7 @@ namespace netcode
 
     void EncodeBits(ArithmeticEncoder & encoder, code_t value, int n)
     {
-        if(1 << n > MAX_DENOM)
+        if(n > 28)
         {
             EncodeBits(encoder, value, 16);
             EncodeBits(encoder, value>>16, n-16);
@@ -170,7 +170,7 @@ namespace netcode
 
     code_t DecodeBits(ArithmeticDecoder & decoder, int n)
     {
-        if(1 << n > MAX_DENOM)
+        if(n > 28)
         {
             code_t lo = DecodeBits(decoder, 16);
             code_t hi = DecodeBits(decoder, n-16);
