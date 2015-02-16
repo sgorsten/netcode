@@ -40,17 +40,33 @@ NCobject * NCauthority::CreateObject(const NCclass * cl)
 {
     if(cl->protocol != protocol) return nullptr;
 
-	auto object = new NCobject(this, cl, stateAlloc.Allocate(cl->sizeInBytes));
-    if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
-	objects.push_back(object);
-	return object;
+    if(cl->isEvent)
+    {
+        auto event = new Event(this, cl);
+        events.push_back(event);
+        return event;
+    }
+    else
+    {
+	    auto object = new Object(this, cl, stateAlloc.Allocate(cl->sizeInBytes));
+        if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
+	    objects.push_back(object);
+	    return object;
+    }
 }
 
 void NCauthority::PublishFrame()
 {
+    // Publish object state
     ++frame;
     frameState[frame] = state;
 
+    // Publish events which occurred this frame
+    for(auto ev : events) ev->isPublished = true;
+    eventHistory[frame] = std::move(events);
+    events.clear();
+
+    // Publish visibility changes and such
     int oldestAck = INT_MAX;
     for(auto peer : peers)
     {
@@ -60,18 +76,19 @@ void NCauthority::PublishFrame()
 
     // Once all clients have acknowledged a certain frame, expire all older frames
     frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - protocol->maxFrameDelta, oldestAck)));
+    // TODO: Expire event history (but perhaps we want to make stronger reliability guarantees for events?)
 }
 
-//////////////
-// NCobject //
-//////////////
+////////////
+// Object //
+////////////
 
-NCobject::NCobject(NCauthority * auth, const NCclass * cl, int stateOffset) : auth(auth), cl(cl), stateOffset(stateOffset)
+Object::Object(NCauthority * auth, const NCclass * cl, int stateOffset) : auth(auth), cl(cl), stateOffset(stateOffset)
 {
     
 }
 
-NCobject::~NCobject()
+Object::~Object()
 {
     if(auth)
     {
@@ -82,10 +99,26 @@ NCobject::~NCobject()
     }
 }
 
-void NCobject::SetIntField(const NCint * field, int value)
+void Object::SetIntField(const NCint * field, int value)
 { 
     if(!auth || field->cl != cl) return;
     reinterpret_cast<int &>(auth->state[stateOffset + field->dataOffset]) = value; 
+}
+
+///////////
+// Event //
+///////////
+
+Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->sizeInBytes), isPublished(false) {}
+Event::~Event()
+{
+    // TODO: Ensure that ncDestroyObject(...) cannot be called on an event after it is published
+}
+
+void Event::SetIntField(const NCint * field, int value)
+{ 
+    if(field->cl != cl || isPublished) return;
+    reinterpret_cast<int &>(state[field->dataOffset]) = value;
 }
 
 ////////////
@@ -128,6 +161,22 @@ struct Frameset
         RefreshPredictors();
     }
 
+    void EncodeAndTallyEvent(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
+    {
+        for(auto field : cl.fields)
+		{
+            distribs.intFieldDists[field->uniqueId].dists[0].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
+        }
+    }
+
+    void DecodeAndTallyEvent(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
+    {
+        for(auto field : cl.fields)
+		{
+            reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intFieldDists[field->uniqueId].dists[0].DecodeAndTally(decoder);
+        }
+    }
+
     int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
 
     void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
@@ -158,7 +207,7 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
-std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded)
+std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded)
 {
     auto it = id2View.find(uniqueId);
     if(it != end(id2View))
@@ -171,13 +220,16 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
     }
 
     auto cl = protocol->classes[classIndex];
-    auto ptr = std::make_shared<NCview>(this, cl, (int)stateAlloc.Allocate(cl->sizeInBytes), frameAdded);
+    auto ptr = std::make_shared<ObjectView>(this, cl, (int)stateAlloc.Allocate(cl->sizeInBytes), frameAdded);
     id2View[uniqueId] = ptr;
     return ptr;
 }
 
 void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 {
+    const int mostRecentFrame = frames.empty() ? 0 : frames.rbegin()->first;
+
+    // Decode frameset
     Frameset frameset;
     frameset.DecodeFrameList(decoder, *protocol);
     if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
@@ -187,6 +239,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         if(frameset.prevFrames[i] != 0 && frameset.prevStates[i] == nullptr) return; // Malformed packet
     }
 
+    // Prepare probability distributions
     auto & distribs = frames[frameset.frame].distribs;
     auto & views = frames[frameset.frame].views;
     if(frameset.prevFrames[0] != 0)
@@ -195,6 +248,24 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         views = frames[frameset.prevFrames[0]].views;
     }
     else distribs = Distribs(*protocol);
+
+    // Decode events that occurred in each frame between the last acknowledged frame and the current frame
+    auto & events = frames[frameset.frame].events;
+    for(int i=frameset.prevFrames[0]+1; i<=frameset.frame; ++i)
+    {
+        // All of the events decoded in here happen on frame i
+        for(int j=0, n = distribs.eventCountDist.DecodeAndTally(decoder); j<n; ++j)
+        {
+            auto classIndex = distribs.classDist.DecodeAndTally(decoder);
+            auto cl = protocol->classes[classIndex];
+            std::vector<uint8_t> state(cl->sizeInBytes);
+            frameset.DecodeAndTallyEvent(decoder, distribs, *cl, state.data());
+            if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
+            {
+                events.push_back(std::unique_ptr<EventView>(new EventView(cl, i, std::move(state))));
+            }
+        }
+    }
 
     // Decode indices of deleted objects
     int delObjects = distribs.delObjectCountDist.DecodeAndTally(decoder);
@@ -276,7 +347,18 @@ void NCpeer::OnPublishFrame(int frame)
 void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 {
     if(!auth) return;
-    visChanges.push_back({object,setVisible});
+
+    if(auto obj = dynamic_cast<const Object *>(object))
+    {
+        visChanges.push_back({obj,setVisible});
+    }
+    else if(auto ev = dynamic_cast<const Event *>(object))
+    {
+        if(ev->isPublished) return;
+        if(setVisible) visibleEvents.insert(ev);
+        else visibleEvents.erase(ev);
+    }
+    else assert(false);
 }
 
 void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
@@ -295,9 +377,24 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     // Encode frameset
     frameset.EncodeFrameList(encoder, *auth->protocol);
 
+    // Obtain probability distributions for this frame
     auto & distribs = frameDistribs[frameset.frame];
     if(frameset.prevFrames[0] != 0) distribs = frameDistribs[frameset.prevFrames[0]];
     else distribs = Distribs(*auth->protocol);
+
+    // Encode visible events that occurred in each frame between the last acknowledged frame and the current frame
+    std::vector<const netcode::Event *> sendEvents;
+    for(int i=frameset.prevFrames[0]+1; i<=frameset.frame; ++i)
+    {
+        sendEvents.clear();
+        for(auto e : auth->eventHistory.find(i)->second) if(visibleEvents.find(e) != end(visibleEvents)) sendEvents.push_back(e);
+        distribs.eventCountDist.EncodeAndTally(encoder, sendEvents.size());
+        for(auto e : sendEvents)
+        {
+            distribs.classDist.EncodeAndTally(encoder, e->cl->uniqueId);
+            frameset.EncodeAndTallyEvent(encoder, distribs, *e->cl, e->state.data());
+        }
+    }
 
     // Encode the indices of destroyed objects
     std::vector<int> deletedIndices;
@@ -364,22 +461,48 @@ void NCpeer::ConsumeMessage(const void * data, int size)
     client.ConsumeUpdate(decoder);
 }
 
+int NCpeer::GetViewCount() const 
+{ 
+    if(client.frames.empty()) return 0;
+    auto & frame = client.frames.rbegin()->second;
+    return frame.views.size() + frame.events.size();
+}
+
+const NCview * NCpeer::GetView(int index) const
+{ 
+    if(client.frames.empty()) return nullptr;
+    auto & frame = client.frames.rbegin()->second;
+    if(index < frame.views.size()) return frame.views[index].get();
+    return frame.events[index - frame.views.size()].get();
+}
+
 ////////////
 // NCview //
 ////////////
 
-NCview::NCview(Client * client, const NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
+ObjectView::ObjectView(Client * client, const NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
 {
     
 }
 
-NCview::~NCview()
+ObjectView::~ObjectView()
 {
     client->stateAlloc.Free(stateOffset, cl->sizeInBytes);
 }
 
-int NCview::GetIntField(const NCint * field) const
+int ObjectView::GetIntField(const NCint * field) const
 { 
     if(field->cl != cl) return 0;
     return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + field->dataOffset]); 
+}
+
+EventView::EventView(const NCclass * cl, int frameAdded, std::vector<uint8_t> state) : cl(cl), frameAdded(frameAdded), state(move(state))
+{
+    
+}
+
+int EventView::GetIntField(const NCint * field) const
+{ 
+    if(field->cl != cl) return 0;
+    return reinterpret_cast<const int &>(state[field->dataOffset]); 
 }

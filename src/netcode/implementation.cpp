@@ -10,7 +10,7 @@
 struct NCblob { std::vector<uint8_t> memory; };
 
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta)                                       { return new NCprotocol(maxFrameDelta); }
-NCclass *       ncCreateClass     (NCprotocol * protocol)                                   { return new NCclass(protocol); }
+NCclass *       ncCreateClass     (NCprotocol * protocol, int isEvent)                      { return new NCclass(protocol,!!isEvent); }
 NCint *         ncCreateInt       (NCclass * cl)                                            { return new NCint(cl); }
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol)                             { return new NCauthority(protocol); }
@@ -30,7 +30,7 @@ void            ncDestroyPeer     (NCpeer * peer)                               
 void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
 void            ncDestroyObject   (NCobject * object)                                       { delete object; }
 
-const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->cl; }
+const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->GetClass(); }
 int             ncGetViewInt      (const NCview * view, const NCint * field)                { return view->GetIntField(field); }
 
 const void *    ncGetBlobData     (const NCblob * blob)                                     { return blob->memory.data(); }

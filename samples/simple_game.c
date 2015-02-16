@@ -14,8 +14,9 @@
 
 /* Protocol data */
 NCprotocol * protocol;
-NCclass * unitClass;
+NCclass * unitClass, * deathEvent;
 NCint * teamField, * hpField, * xField, * yField;
+NCint * deathX, * deathY;
 
 /* Server state */
 struct Unit
@@ -54,11 +55,14 @@ int main(int argc, char * argv[])
 
     /* init protocol */
     protocol = ncCreateProtocol(30);
-    unitClass = ncCreateClass(protocol);
+    unitClass = ncCreateClass(protocol,0);
     teamField = ncCreateInt(unitClass);
     hpField = ncCreateInt(unitClass);
     xField = ncCreateInt(unitClass);
     yField = ncCreateInt(unitClass);
+    deathEvent = ncCreateClass(protocol,1);
+    deathX = ncCreateInt(deathEvent);
+    deathY = ncCreateInt(deathEvent);
 
     /* init server */
     serverAuth = ncCreateAuthority(protocol);
@@ -113,6 +117,11 @@ int main(int argc, char * argv[])
                 --units[target].hp;
                 if(units[target].hp < 1) /* if target is dead, destroy and respawn */
                 {
+                    NCobject * e = ncCreateObject(serverAuth, deathEvent);
+                    ncSetObjectInt(e, deathX, units[target].x);
+                    ncSetObjectInt(e, deathY, units[target].y);
+                    ncSetVisibility(serverPeer, e, 1);
+
                     ncDestroyObject(units[target].object);
                     spawn_unit(target);
                 }
@@ -182,6 +191,19 @@ int main(int argc, char * argv[])
                 glVertex2i(x+10, y-13);
                 glVertex2i(x+10, y-11);
                 glVertex2i(x-10+(h*20/100), y-11);
+                glEnd();
+            }
+            else if(ncGetViewClass(view) == deathEvent)
+            {
+                x = ncGetViewInt(view, deathX);
+                y = ncGetViewInt(view, deathY);
+                glBegin(GL_TRIANGLE_FAN);
+                glColor3f(1,1,0);
+                for(j=0; j<12; ++j)
+                {
+                    a = 6.28f * j / 12;
+                    glVertex2f(x + cosf(a)*20, y + sinf(a)*20);
+                }
                 glEnd();
             }
         }

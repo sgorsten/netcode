@@ -22,7 +22,7 @@ typedef struct NCview NCview;
 typedef struct NCblob NCblob;
      
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta);
-NCclass *       ncCreateClass     (NCprotocol * protocol);
+NCclass *       ncCreateClass     (NCprotocol * protocol, int isEvent);
 NCint *         ncCreateInt       (NCclass * cl);
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol);

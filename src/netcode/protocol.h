@@ -24,11 +24,12 @@ struct NCint
 struct NCclass
 {
     NCprotocol *             protocol;       // Protocol that this class belongs to
+    bool                     isEvent;        // Whether or not this is an event class
     size_t                   uniqueId;       // Unique identifier for this class within the protocol
     size_t                   sizeInBytes;    // Size of this class in bytes
     std::vector<NCint *>     fields;         // Fields of this class
 
-    NCclass(NCprotocol * protocol);
+    NCclass(NCprotocol * protocol, bool isEvent);
 };
 
 struct NCprotocol
@@ -45,7 +46,8 @@ namespace netcode
     struct Distribs
     {
         std::vector<FieldDistribution> intFieldDists;
-	    IntegerDistribution newObjectCountDist, delObjectCountDist, uniqueIdDist;
+	    IntegerDistribution eventCountDist, newObjectCountDist, delObjectCountDist;
+        IntegerDistribution uniqueIdDist;
         SymbolDistribution classDist;
 
         Distribs() {}

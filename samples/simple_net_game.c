@@ -44,9 +44,9 @@ int main(int argc, char * argv[])
 
     /* initialize protocol */
     protocol = ncCreateProtocol(30);
-    teamClass = ncCreateClass(protocol);
+    teamClass = ncCreateClass(protocol,0);
     teamId = ncCreateInt(teamClass);
-    unitClass = ncCreateClass(protocol);
+    unitClass = ncCreateClass(protocol,0);
     unitTeamId = ncCreateInt(unitClass);
     unitHp = ncCreateInt(unitClass);
     unitX = ncCreateInt(unitClass);

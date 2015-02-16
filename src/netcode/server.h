@@ -12,15 +12,26 @@
 
 #include <memory>
 #include <map>
+#include <set>
+
+namespace netcode
+{
+    struct Object;
+    struct Event;
+    struct ObjectView;
+    struct EventView;
+}
 
 struct NCauthority
 {
 	const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
-	std::vector<NCobject *> objects;
+	std::vector<netcode::Object *> objects;
+    std::vector<netcode::Event *> events;
     std::vector<NCpeer *> peers;
 
 	std::vector<uint8_t> state;
+    std::map<int, std::vector<netcode::Event *>> eventHistory;
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
@@ -40,23 +51,44 @@ struct NCauthority
 
 struct NCobject
 {
-    NCauthority * auth;
-    const NCclass * cl;
-	int stateOffset;
+    virtual ~NCobject() {}
 
-	NCobject(NCauthority * auth, const NCclass * cl, int stateOffset);
-    ~NCobject();
-
-    void SetIntField(const NCint * field, int value);
+    virtual void SetIntField(const NCint * field, int value) = 0;
 };
 
 namespace netcode
 {
+    struct Object : public NCobject
+    {
+        NCauthority * auth;
+        const NCclass * cl;
+	    int stateOffset;
+
+	    Object(NCauthority * auth, const NCclass * cl, int stateOffset);
+        ~Object();
+
+        void SetIntField(const NCint * field, int value) override;
+    };
+
+    struct Event : public NCobject
+    {
+        NCauthority * auth;
+        const NCclass * cl;
+        std::vector<uint8_t> state;
+        bool isPublished;
+
+        Event(NCauthority * auth, const NCclass * cl);
+        ~Event();
+
+        void SetIntField(const NCint * field, int value) override;
+    };
+
     struct Client
     {
         struct Frame
         {
-            std::vector<std::shared_ptr<NCview>> views;
+            std::vector<std::shared_ptr<netcode::ObjectView>> views;
+            std::vector<std::unique_ptr<netcode::EventView>> events;
             std::vector<uint8_t> state;
             Distribs distribs;
         };
@@ -64,11 +96,11 @@ namespace netcode
         const NCprotocol * protocol;
         netcode::RangeAllocator stateAlloc;
         std::map<int, Frame> frames;
-        std::map<int, std::weak_ptr<NCview>> id2View;
+        std::map<int, std::weak_ptr<netcode::ObjectView>> id2View;
 
 	    Client(const NCprotocol * protocol);
 
-        std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded);
+        std::shared_ptr<netcode::ObjectView> CreateView(size_t classIndex, int uniqueId, int frameAdded);
 
         const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
         const uint8_t * GetFrameState(int frame) const
@@ -86,16 +118,17 @@ struct NCpeer
 {
     struct ObjectRecord
     {
-        const NCobject * object; int uniqueId, frameAdded, frameRemoved; 
+        const netcode::Object * object; int uniqueId, frameAdded, frameRemoved; 
         bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
-    NCauthority * auth;                                         // Object authority whose objects may be visible to this peer
-    std::vector<ObjectRecord> records;                          // Records of object visibility
-    std::vector<std::pair<const NCobject *,bool>> visChanges;   // Changes to visibility since the last call to ncPublishFrame(...)
-    std::map<int, netcode::Distribs> frameDistribs;             // Probability distributions as they existed at the end of various frames
-    std::vector<int> ackFrames;                                 // The set of frames that has been acknowledged by the remote peer
-    int nextId;                                                 // The next network ID to use when sending to the remote peer
+    NCauthority * auth;                                                 // Object authority whose objects may be visible to this peer
+    std::vector<ObjectRecord> records;                                  // Records of object visibility
+    std::set<const netcode::Event *> visibleEvents;                     // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
+    std::vector<std::pair<const netcode::Object *,bool>> visChanges;    // Changes to visibility since the last call to ncPublishFrame(...)
+    std::map<int, netcode::Distribs> frameDistribs;                     // Probability distributions as they existed at the end of various frames
+    std::vector<int> ackFrames;                                         // The set of frames that has been acknowledged by the remote peer
+    int nextId;                                                         // The next network ID to use when sending to the remote peer
 
     netcode::Client client;
 
@@ -112,21 +145,45 @@ struct NCpeer
     std::vector<uint8_t> ProduceMessage();
     void ConsumeMessage(const void * data, int size);
 
-    int GetViewCount() const { return client.frames.empty() ? 0 : client.frames.rbegin()->second.views.size(); }
-    const NCview * GetView(int index) const { return client.frames.rbegin()->second.views[index].get(); }
+    int GetViewCount() const;
+    const NCview * GetView(int index) const;
 };
 
 struct NCview
 {
-    netcode::Client * client;
-    const NCclass * cl;
-    int frameAdded, stateOffset;
+    virtual ~NCview() {}
 
-	NCview(netcode::Client * client, const NCclass * cl, int stateOffset, int frameAdded);
-    ~NCview();
-
-    bool IsLive(int frame) const { return frameAdded <= frame; }
-    int GetIntField(const NCint * field) const;
+    virtual const NCclass * GetClass() const = 0;
+    virtual int GetIntField(const NCint * field) const = 0;
 };
+
+namespace netcode
+{
+    struct ObjectView : public NCview
+    {
+        netcode::Client * client;
+        const NCclass * cl;
+        int frameAdded, stateOffset;
+
+	    ObjectView(netcode::Client * client, const NCclass * cl, int stateOffset, int frameAdded);
+        ~ObjectView();
+
+        bool IsLive(int frame) const { return frameAdded <= frame; }
+        const NCclass * GetClass() const override { return cl; }
+        int GetIntField(const NCint * field) const override;
+    };
+
+    struct EventView : public NCview
+    {
+        const NCclass * cl;
+        int frameAdded;
+        std::vector<uint8_t> state;
+
+	    EventView(const NCclass * cl, int frameAdded, std::vector<uint8_t> state);
+
+        const NCclass * GetClass() const override { return cl; }
+        int GetIntField(const NCint * field) const override;
+    };
+}
 
 #endif
