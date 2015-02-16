@@ -21,9 +21,10 @@ void error(const char * message);
 
 /* protocol */
 NCprotocol * protocol;
-NCclass * teamClass, * unitClass;
+NCclass * teamClass, * unitClass, * deathEvent;
 NCint * teamId;
 NCint * unitTeamId, * unitHp, * unitX, * unitY;
+NCint * deathX, * deathY;
 
 struct Server * CreateServer(int port);
 void UpdateServer(struct Server * s, float timestep);
@@ -51,6 +52,9 @@ int main(int argc, char * argv[])
     unitHp = ncCreateInt(unitClass);
     unitX = ncCreateInt(unitClass);
     unitY = ncCreateInt(unitClass);
+    deathEvent = ncCreateClass(protocol,1);
+    deathX = ncCreateInt(deathEvent);
+    deathY = ncCreateInt(deathEvent);
 
     printf("(h)ost, (j)oin, or (q)uit?\n");
     switch(getchar())
@@ -160,6 +164,20 @@ void DestroyServer(struct Server * s)
     free(s);
 }
 
+int IsVisible(struct Server * s, int x, int y, int team)
+{
+    int i;
+    for(int i=0; i<20; ++i)
+    {
+        float dx, dy;
+        if(s->units[i].team != team) continue;
+        dx = x - s->units[i].x;
+        dy = y - s->units[i].y;
+        if(dx*dx + dy*dy < 120*120) return 1;
+    }
+    return 0;
+}
+
 void UpdateServer(struct Server * s, float timestep)
 {
     int i, j; struct timeval tv; fd_set fds;
@@ -228,8 +246,15 @@ void UpdateServer(struct Server * s, float timestep)
         else /* if near, attack target */
         {
             --s->units[target].hp;
-            if(s->units[target].hp < 1) /* if target is dead, destroy and respawn */
+            if(s->units[target].hp < 1) /* if target is dead */
             {
+                /* create an event to indicate the death of this unit */
+                NCobject * e = ncCreateObject(s->auth, deathEvent);
+                ncSetObjectInt(e, deathX, s->units[target].x);
+                ncSetObjectInt(e, deathY, s->units[target].y);
+                for(j=0; j<s->numPeers; ++j) ncSetVisibility(s->peers[j].npeer, e, s->units[target].team == j%2 || IsVisible(s, s->units[target].x, s->units[target].y, !s->units[target].team));
+
+                /* destroy and respawn the unit */
                 ncDestroyObject(s->units[target].nobj);
                 SpawnUnit(s, target);
             }
@@ -244,26 +269,11 @@ void UpdateServer(struct Server * s, float timestep)
         ncSetObjectInt(s->units[i].nobj, unitHp, s->units[i].hp);
         ncSetObjectInt(s->units[i].nobj, unitX, (int)s->units[i].x);
         ncSetObjectInt(s->units[i].nobj, unitY, (int)s->units[i].y);
-
-        /* determine if unit is visible to other team */
-        int isVisible = 0;
-        for(j=0; j<20; ++j)
-        {
-            float dx, dy;
-            if(s->units[i].team == s->units[j].team) continue;
-            dx = s->units[j].x - s->units[i].x;
-            dy = s->units[j].y - s->units[i].y;
-            if(dx*dx + dy*dy < 120*120)
-            {
-                isVisible = 1;
-                break;
-            }
-        }
-
+        
         /* units are visible to their own team, and within 120 units of the other team's units */
         for(j=0; j<s->numPeers; ++j)
         {
-            ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, s->units[i].team == j%2 || isVisible);
+            ncSetVisibility(s->peers[j].npeer, s->units[i].nobj, s->units[i].team == j%2 || IsVisible(s, s->units[i].x, s->units[i].y, !s->units[i].team));
         }
     }
     ncPublishFrame(s->auth);
@@ -421,6 +431,13 @@ void UpdateClient(struct Client * c)
             glVertex2i(x+10, y-11);
             glVertex2i(x-10+(h*20/100), y-11);
             glEnd();
+        }
+        else if(ncGetViewClass(nview) == deathEvent)
+        {
+            x = ncGetViewInt(nview, deathX);
+            y = ncGetViewInt(nview, deathY);
+            glColor3f(1,1,0);
+            DrawCircle(x, y, 20);
         }
     }
     glPopMatrix();
