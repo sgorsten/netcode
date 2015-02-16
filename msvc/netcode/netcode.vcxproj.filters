@@ -8,9 +8,6 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\netcode.h" />
     <ClInclude Include="..\..\include\netcodex.h" />
-    <ClInclude Include="..\..\src\netcode\client.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\netcode\protocol.h">
       <Filter>src</Filter>
     </ClInclude>
@@ -22,9 +19,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\netcode\client.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\netcode\extensions.cpp">
       <Filter>src</Filter>
     </ClCompile>

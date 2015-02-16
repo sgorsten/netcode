@@ -6,7 +6,6 @@
 // this software for any purpose, including commercial applications.
 
 #include "server.h"
-#include "client.h"
 
 struct NCblob { std::vector<uint8_t> memory; };
 
@@ -21,9 +20,11 @@ NCobject *      ncCreateObject    (NCauthority * authority, const NCclass * cl) 
 void            ncPublishFrame    (NCauthority * authority)                                 { return authority->PublishFrame(); }
 void            ncDestroyAuthority(NCauthority * authority)                                 { delete authority; }
 
-int             ncGetViewCount    (const NCpeer * peer)                                     { return peer->client.frames.empty() ? 0 : peer->client.frames.rbegin()->second.views.size(); }
-const NCview *  ncGetView         (const NCpeer * peer, int index)                          { return peer->client.frames.rbegin()->second.views[index].get(); }
+int             ncGetViewCount    (const NCpeer * peer)                                     { return peer->GetViewCount(); }
+const NCview *  ncGetView         (const NCpeer * peer, int index)                          { return peer->GetView(index); }
 void            ncSetVisibility   (NCpeer * peer, const NCobject * object, int isVisible)   { peer->SetVisibility(object, !!isVisible); }
+NCblob *        ncProduceMessage  (NCpeer * peer)                                           { return new NCblob{peer->ProduceMessage()}; }
+void            ncConsumeMessage  (NCpeer * peer, const void * data, int size)              { peer->ConsumeMessage(data, size); }
 void            ncDestroyPeer     (NCpeer * peer)                                           { delete peer; }
 
 void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
@@ -35,23 +36,3 @@ int             ncGetViewInt      (const NCview * view, const NCint * field)    
 const void *    ncGetBlobData     (const NCblob * blob)                                     { return blob->memory.data(); }
 int             ncGetBlobSize     (const NCblob * blob)                                     { return blob->memory.size(); }
 void            ncFreeBlob        (NCblob * blob)                                           { delete blob; }
-
-NCblob * ncProduceMessage(NCpeer * peer)
-{ 
-    auto response = peer->client.ProduceResponse();
-    auto update = peer->ProduceUpdate();
-    auto blob = new NCblob;
-    blob->memory.resize(2);
-    *reinterpret_cast<uint16_t *>(blob->memory.data()) = response.size();
-    blob->memory.insert(end(blob->memory), begin(response), end(response));
-    blob->memory.insert(end(blob->memory), begin(update), end(update));
-    return blob;
-}
-
-void ncConsumeMessage(NCpeer * peer, const void * data, int size)
-{ 
-    auto bytes = reinterpret_cast<const uint8_t *>(data);
-    auto responseSize = *reinterpret_cast<const uint16_t *>(data);
-    peer->ConsumeResponse(bytes + 2, responseSize);
-    peer->client.ConsumeUpdate(bytes + 2 + responseSize, size - 2 - responseSize);
-}
