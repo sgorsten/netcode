@@ -75,8 +75,19 @@ void NCauthority::PublishFrame()
     }
 
     // Once all clients have acknowledged a certain frame, expire all older frames
-    frameState.erase(begin(frameState), frameState.lower_bound(std::min(frame - protocol->maxFrameDelta, oldestAck)));
-    // TODO: Expire event history (but perhaps we want to make stronger reliability guarantees for events?)
+    auto lastFrameToKeep = std::min(frame - protocol->maxFrameDelta, oldestAck);
+    EraseBefore(frameState, lastFrameToKeep);
+
+    for(auto p : eventHistory)
+    {
+        if(p.first >= lastFrameToKeep) break;
+        for(auto e : p.second)
+        {
+            for(auto peer : peers) peer->SetVisibility(e, false);
+            delete e;
+        }
+    }
+    EraseBefore(eventHistory, lastFrameToKeep);
 }
 
 ////////////
@@ -88,15 +99,12 @@ Object::Object(NCauthority * auth, const NCclass * cl, int stateOffset) : auth(a
     
 }
 
-Object::~Object()
-{
-    if(auth)
-    {
-        auth->stateAlloc.Free(stateOffset, cl->sizeInBytes);
-        for(auto peer : auth->peers) peer->SetVisibility(this, false);
-        auto it = std::find(begin(auth->objects), end(auth->objects), this);
-        if(it != end(auth->objects)) auth->objects.erase(it);
-    }
+void Object::Destroy()
+{ 
+    auth->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+    for(auto peer : auth->peers) peer->SetVisibility(this, false);
+    Erase(auth->objects, this);
+    delete this; 
 }
 
 void Object::SetIntField(const NCint * field, int value)
@@ -110,9 +118,16 @@ void Object::SetIntField(const NCint * field, int value)
 ///////////
 
 Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->sizeInBytes), isPublished(false) {}
-Event::~Event()
-{
-    // TODO: Ensure that ncDestroyObject(...) cannot be called on an event after it is published
+
+void Event::Destroy()
+{ 
+    if(!isPublished)
+    {
+        for(auto peer : auth->peers) peer->SetVisibility(this, false);
+        Erase(auth->events, this);
+        auth->events.erase(std::find(begin(auth->events), end(auth->events), this));
+        delete this;
+    }
 }
 
 void Event::SetIntField(const NCint * field, int value)

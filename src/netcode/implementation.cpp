@@ -28,7 +28,7 @@ void            ncConsumeMessage  (NCpeer * peer, const void * data, int size)  
 void            ncDestroyPeer     (NCpeer * peer)                                           { delete peer; }
 
 void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
-void            ncDestroyObject   (NCobject * object)                                       { delete object; }
+void            ncDestroyObject   (NCobject * object)                                       { object->Destroy(); }
 
 const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->GetClass(); }
 int             ncGetViewInt      (const NCview * view, const NCint * field)                { return view->GetIntField(field); }

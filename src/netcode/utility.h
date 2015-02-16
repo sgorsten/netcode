@@ -9,8 +9,9 @@
 #define NETCODE_UTILITY_H
 
 #include <cstdint>
-#include <vector>
 #include <algorithm>
+#include <vector>
+#include <map>
 
 namespace netcode
 {
@@ -114,7 +115,9 @@ namespace netcode
         void Free(size_t offset, size_t amount);
     };
 
-    template<class T> size_t GetIndex(const std::vector<T> & vec, T value) { return std::find(begin(vec), end(vec), value) - begin(vec); }
+    template<class T> size_t GetIndex(const std::vector<T> & vec, const T & value) { return std::find(begin(vec), end(vec), value) - begin(vec); }
+    template<class T> void Erase(std::vector<T> & vec, const T & value) { vec.erase(std::find(begin(vec), end(vec), value)); }
+    template<class T> void EraseBefore(std::map<int, T> & map, int key) { map.erase(begin(map), map.lower_bound(key)); }
     template<class T, class F> void EraseIf(T & container, F f) { container.erase(remove_if(begin(container), end(container), f), end(container)); }
 }
 
