@@ -176,13 +176,8 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
     return ptr;
 }
 
-void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
+void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 {
-    if(bufferSize < 4) return;
-
-	std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
-	ArithmeticDecoder decoder(bytes);
-
     Frameset frameset;
     frameset.DecodeFrameList(decoder, *protocol);
     if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
@@ -234,16 +229,12 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     }
 }
 
-std::vector<uint8_t> Client::ProduceResponse() const
+void Client::ProduceResponse(ArithmeticEncoder & encoder) const
 {
-    std::vector<uint8_t> buffer;
-    ArithmeticEncoder encoder(buffer);
     auto n = std::min(frames.size(), size_t(4));
     EncodeUniform(encoder, n, 5);
     auto it = frames.rbegin();
     for(int i=0; i<n; ++i, ++it) EncodeBits(encoder, it->first, 32);
-    encoder.Finish();
-    return buffer;
 }
 
 ////////////
@@ -288,10 +279,8 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
     visChanges.push_back({object,setVisible});
 }
 
-std::vector<uint8_t> NCpeer::ProduceUpdate()
+void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 {
-    if(!auth) return {};
-
     Frameset frameset;
     frameset.frame = auth->frame;
 
@@ -304,8 +293,6 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     frameset.RefreshPredictors();
 
     // Encode frameset
-	std::vector<uint8_t> bytes;
-    ArithmeticEncoder encoder(bytes);
     frameset.EncodeFrameList(encoder, *auth->protocol);
 
     auto & distribs = frameDistribs[frameset.frame];
@@ -345,17 +332,12 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
 
 	// Encode updates for each view
     for(const auto & record : records) if(record.IsLive(frameset.frame)) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->stateOffset, record.frameAdded, state);
-
-	encoder.Finish();
-	return bytes;
 }
 
-void NCpeer::ConsumeResponse(const uint8_t * data, size_t size) 
+void NCpeer::ConsumeResponse(ArithmeticDecoder & decoder) 
 {
     if(!auth) return;
     std::vector<int> newAck;
-    std::vector<uint8_t> buffer(data, data+size);
-    ArithmeticDecoder decoder(buffer);
     for(int i=0, n=DecodeUniform(decoder, 5); i!=n; ++i) newAck.push_back(DecodeBits(decoder, 32));
     if(newAck.empty()) return;
     if(ackFrames.empty() || ackFrames.front() < newAck.front()) ackFrames = newAck;
@@ -363,22 +345,23 @@ void NCpeer::ConsumeResponse(const uint8_t * data, size_t size)
 
 std::vector<uint8_t> NCpeer::ProduceMessage()
 { 
-    auto response = client.ProduceResponse();
-    auto update = ProduceUpdate();
+    if(!auth) return {};
+
     std::vector<uint8_t> buffer;
-    buffer.resize(2);
-    *reinterpret_cast<uint16_t *>(buffer.data()) = response.size();
-    buffer.insert(end(buffer), begin(response), end(response));
-    buffer.insert(end(buffer), begin(update), end(update));
+    ArithmeticEncoder encoder(buffer);
+    client.ProduceResponse(encoder);
+    ProduceUpdate(encoder);
+    encoder.Finish();
     return buffer;
 }
 
 void NCpeer::ConsumeMessage(const void * data, int size)
 { 
     auto bytes = reinterpret_cast<const uint8_t *>(data);
-    auto responseSize = *reinterpret_cast<const uint16_t *>(data);
-    ConsumeResponse(bytes + 2, responseSize);
-    client.ConsumeUpdate(bytes + 2 + responseSize, size - 2 - responseSize);
+    std::vector<uint8_t> buffer(bytes, bytes+size);
+    ArithmeticDecoder decoder(buffer);
+    ConsumeResponse(decoder);
+    client.ConsumeUpdate(decoder);
 }
 
 ////////////

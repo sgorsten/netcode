@@ -77,8 +77,8 @@ namespace netcode
             return it != end(frames) ? it->second.state.data() : nullptr;
         }
 
-	    void ConsumeUpdate(const uint8_t * buffer, size_t bufferSize);
-        std::vector<uint8_t> ProduceResponse() const;
+	    void ConsumeUpdate(netcode::ArithmeticDecoder & decoder);
+        void ProduceResponse(netcode::ArithmeticEncoder & encoder) const;
     };
 }
 
@@ -105,8 +105,9 @@ struct NCpeer
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
     void SetVisibility(const NCobject * object, bool setVisible);
-    std::vector<uint8_t> ProduceUpdate();
-    void ConsumeResponse(const uint8_t * data, size_t size);
+
+    void ProduceUpdate(netcode::ArithmeticEncoder & encoder);
+    void ConsumeResponse(netcode::ArithmeticDecoder & decoder);
 
     std::vector<uint8_t> ProduceMessage();
     void ConsumeMessage(const void * data, int size);
