@@ -237,13 +237,12 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 std::vector<uint8_t> Client::ProduceResponse() const
 {
     std::vector<uint8_t> buffer;
-    for(auto it = frames.rbegin(); it != frames.rend(); ++it)
-    {
-        auto offset = buffer.size();
-        buffer.resize(offset + 4);
-        memcpy(buffer.data() + offset, &it->first, sizeof(int32_t));
-        if(buffer.size() == 16) break;
-    }
+    ArithmeticEncoder encoder(buffer);
+    auto n = std::min(frames.size(), size_t(4));
+    EncodeUniform(encoder, n, 5);
+    auto it = frames.rbegin();
+    for(int i=0; i<n; ++i, ++it) EncodeBits(encoder, it->first, 32);
+    encoder.Finish();
     return buffer;
 }
 
@@ -355,14 +354,9 @@ void NCpeer::ConsumeResponse(const uint8_t * data, size_t size)
 {
     if(!auth) return;
     std::vector<int> newAck;
-    while(size >= 4)
-    {
-        int32_t frame;
-        memcpy(&frame, data, sizeof(frame));
-        newAck.push_back(frame);
-        data += 4;
-        size -= 4;
-    }
+    std::vector<uint8_t> buffer(data, data+size);
+    ArithmeticDecoder decoder(buffer);
+    for(int i=0, n=DecodeUniform(decoder, 5); i!=n; ++i) newAck.push_back(DecodeBits(decoder, 32));
     if(newAck.empty()) return;
     if(ackFrames.empty() || ackFrames.front() < newAck.front()) ackFrames = newAck;
 }
