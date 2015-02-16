@@ -95,6 +95,7 @@ void NCobject::SetIntField(const NCint * field, int value)
 struct Frameset
 {
     int32_t frame, prevFrames[4];
+    const uint8_t * prevStates[4];
     CurvePredictor predictors[5];
 
     void RefreshPredictors()
@@ -106,7 +107,17 @@ struct Frameset
         predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
     }
 
-    void Decode(ArithmeticDecoder & decoder, const NCprotocol & protocol)
+    void EncodeFrameList(ArithmeticEncoder & encoder, const NCprotocol & protocol)
+    {
+        EncodeBits(encoder, frame, 32);
+        for(int i=0; i<4; ++i)
+        {
+            code_t value = prevFrames[i] ? frame - prevFrames[i] : 0;
+            EncodeUniform(encoder, value, protocol.maxFrameDelta+1);
+        }
+    }
+
+    void DecodeFrameList(ArithmeticDecoder & decoder, const NCprotocol & protocol)
     {
         frame = DecodeBits(decoder, 32);
         for(int i=0; i<4; ++i)
@@ -117,14 +128,28 @@ struct Frameset
         RefreshPredictors();
     }
 
-    void Encode(ArithmeticEncoder & encoder, const NCprotocol & protocol)
+    int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
+
+    void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
     {
-        EncodeBits(encoder, frame, 32);
-        for(int i=0; i<4; ++i)
-        {
-            code_t value = prevFrames[i] ? frame - prevFrames[i] : 0;
-            EncodeUniform(encoder, value, protocol.maxFrameDelta+1);
-        }
+        const int sampleCount = GetSampleCount(frameAdded);
+        for(auto field : cl.fields)
+		{
+            int offset = stateOffset + field->dataOffset, prevValues[4];
+            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+		    distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
+		}    
+    }
+
+    void DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state)
+    {
+        const int sampleCount = GetSampleCount(frameAdded);
+        for(auto field : cl.fields)
+		{
+            int offset = stateOffset + field->dataOffset, prevValues[4];
+            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+		    reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
+		}    
     }
 };
 
@@ -154,18 +179,17 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
 void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
 {
     if(bufferSize < 4) return;
-    const uint8_t * prevStates[4];
 
 	std::vector<uint8_t> bytes(buffer, buffer + bufferSize);
 	ArithmeticDecoder decoder(bytes);
 
     Frameset frameset;
-    frameset.Decode(decoder, *protocol);
+    frameset.DecodeFrameList(decoder, *protocol);
     if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
     for(int i=0; i<4; ++i)
     {
-        prevStates[i] = GetFrameState(frameset.prevFrames[i]);
-        if(frameset.prevFrames[i] != 0 && prevStates[i] == nullptr) return; // Malformed packet
+        frameset.prevStates[i] = GetFrameState(frameset.prevFrames[i]);
+        if(frameset.prevFrames[i] != 0 && frameset.prevStates[i] == nullptr) return; // Malformed packet
     }
 
     auto & distribs = frames[frameset.frame].distribs;
@@ -199,26 +223,7 @@ void Client::ConsumeUpdate(const uint8_t * buffer, size_t bufferSize)
     state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
-	for (auto view : views)
-	{
-        int sampleCount = 0;
-        for(int i=4; i>0; --i)
-        {
-            if(view->IsLive(frameset.prevFrames[i-1]))
-            {
-                sampleCount = i;
-                break;
-            }
-        }
-
-		for (auto field : view->cl->fields)
-		{
-            int offset = view->stateOffset + field->dataOffset;
-            int prevValues[4];
-            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-            reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, frameset.predictors, sampleCount);
-		}
-	}
+	for(auto view : views) frameset.DecodeAndTallyObject(decoder, distribs, *view->cl, view->stateOffset, view->frameAdded, state.data());
 
     // Server will never again refer to frames before this point
     frames.erase(begin(frames), frames.lower_bound(std::min(frameset.frame - protocol->maxFrameDelta, frameset.prevFrames[3])));
@@ -302,7 +307,7 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     // Encode frameset
 	std::vector<uint8_t> bytes;
     ArithmeticEncoder encoder(bytes);
-    frameset.Encode(encoder, *auth->protocol);
+    frameset.EncodeFrameList(encoder, *auth->protocol);
 
     auto & distribs = frameDistribs[frameset.frame];
     if(frameset.prevFrames[0] != 0) distribs = frameDistribs[frameset.prevFrames[0]];
@@ -337,34 +342,10 @@ std::vector<uint8_t> NCpeer::ProduceUpdate()
     }
 
     auto state = auth->GetFrameState(frameset.frame);
-    const uint8_t * prevStates[4];
-    for(int i=0; i<4; ++i) prevStates[i] = auth->GetFrameState(frameset.prevFrames[i]);
+    for(int i=0; i<4; ++i) frameset.prevStates[i] = auth->GetFrameState(frameset.prevFrames[i]);
 
 	// Encode updates for each view
-    for(const auto & record : records)
-	{
-        if(!record.IsLive(frameset.frame)) continue;
-        auto object = record.object;
-
-        int sampleCount = 0;
-        for(int i=4; i>0; --i)
-        {
-            if(record.IsLive(frameset.prevFrames[i-1]))
-            {
-                sampleCount = i;
-                break;
-            }
-        }
-
-        for(auto field : object->cl->fields)
-		{
-            int offset = object->stateOffset + field->dataOffset;
-            int value = reinterpret_cast<const int &>(state[offset]);
-            int prevValues[4];
-            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-			distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, value, prevValues, frameset.predictors, sampleCount);
-		}
-	}
+    for(const auto & record : records) if(record.IsLive(frameset.frame)) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->stateOffset, record.frameAdded, state);
 
 	encoder.Finish();
 	return bytes;
