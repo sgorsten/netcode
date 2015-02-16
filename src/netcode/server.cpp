@@ -234,7 +234,7 @@ std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, 
         }        
     }
 
-    auto cl = protocol->classes[classIndex];
+    auto cl = protocol->objectClasses[classIndex];
     auto ptr = std::make_shared<ObjectView>(this, cl, (int)stateAlloc.Allocate(cl->sizeInBytes), frameAdded);
     id2View[uniqueId] = ptr;
     return ptr;
@@ -271,8 +271,8 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         // All of the events decoded in here happen on frame i
         for(int j=0, n = distribs.eventCountDist.DecodeAndTally(decoder); j<n; ++j)
         {
-            auto classIndex = distribs.classDist.DecodeAndTally(decoder);
-            auto cl = protocol->classes[classIndex];
+            auto classIndex = distribs.eventClassDist.DecodeAndTally(decoder);
+            auto cl = protocol->eventClasses[classIndex];
             std::vector<uint8_t> state(cl->sizeInBytes);
             frameset.DecodeAndTallyEvent(decoder, distribs, *cl, state.data());
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
@@ -295,7 +295,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
-        auto classIndex = distribs.classDist.DecodeAndTally(decoder);
+        auto classIndex = distribs.objectClassDist.DecodeAndTally(decoder);
         auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
         views.push_back(CreateView(classIndex, uniqueId, frameset.frame));
 	}
@@ -406,7 +406,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         distribs.eventCountDist.EncodeAndTally(encoder, sendEvents.size());
         for(auto e : sendEvents)
         {
-            distribs.classDist.EncodeAndTally(encoder, e->cl->uniqueId);
+            distribs.eventClassDist.EncodeAndTally(encoder, e->cl->uniqueId);
             frameset.EncodeAndTallyEvent(encoder, distribs, *e->cl, e->state.data());
         }
     }
@@ -435,7 +435,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 	distribs.newObjectCountDist.EncodeAndTally(encoder, newObjects.size());
 	for (auto record : newObjects)
     {
-        distribs.classDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
+        distribs.objectClassDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
     }
 

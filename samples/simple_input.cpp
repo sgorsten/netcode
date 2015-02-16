@@ -1,3 +1,10 @@
+// Copyright (c) 2015 Sterling Orsten
+//   This software is provided 'as-is', without any express or implied
+// warranty. In no event will the author be held liable for any damages
+// arising from the use of this software. You are granted a perpetual, 
+// irrevocable, world-wide license to copy, modify, and redistribute
+// this software for any purpose, including commercial applications.
+
 #include <netcode.h>
 #include <GLFW\glfw3.h>
 #include <WinSock2.h>
@@ -28,11 +35,11 @@ struct Protocol
     {
         protocol = ncCreateProtocol(30);
 
-        characterCl = ncCreateClass(protocol);
+        characterCl = ncCreateClass(protocol,0);
         characterPosX = ncCreateInt(characterCl);
         characterPosY = ncCreateInt(characterCl);
 
-        inputCl = ncCreateClass(protocol);
+        inputCl = ncCreateClass(protocol,0);
         inputTargetX = ncCreateInt(inputCl);
         inputTargetY = ncCreateInt(inputCl);    
     }

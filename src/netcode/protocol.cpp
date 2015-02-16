@@ -13,10 +13,10 @@ NCint::NCint(NCclass * cl) : cl(cl), uniqueId(cl->protocol->numIntFields++), dat
     cl->fields.push_back(this);
 }
 
-NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(protocol->classes.size()), sizeInBytes(0)
+NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(isEvent ? protocol->eventClasses.size() : protocol->objectClasses.size()), sizeInBytes(0)
 {
-    // TODO: Possibly store object and event classes in separate lists, with separate IDs
-    protocol->classes.push_back(this);
+    if(isEvent) protocol->eventClasses.push_back(this);
+    else protocol->objectClasses.push_back(this);
 }
 
 NCprotocol::NCprotocol(int maxFrameDelta) : maxFrameDelta(maxFrameDelta), numIntFields(0)

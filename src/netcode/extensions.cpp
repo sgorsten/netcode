@@ -39,7 +39,7 @@ namespace netcode
     static size_t MemUsage(const Distribs & d) { return MemUsage(d.intFieldDists); }
     static size_t MemUsage(const NCint * f) { return sizeof(NCint); }
     static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->fields); }
-    static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->classes); }
+    static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->objectClasses) + MemUsage(p->eventClasses); }
     static size_t MemUsage(const NCobject * obj) { return sizeof(NCobject); }
     static size_t MemUsage(const Client::Frame & f) { return MemUsage(f.views) + MemUsage(f.state) + MemUsage(f.distribs); }
     static size_t MemUsage(const Client & client) { return MemUsage(client.frames); }
@@ -53,7 +53,7 @@ namespace netcode
         //if(it == client->frames.rend()) return;
         //const auto & distribs = it->second.distribs;
 
-        float idCost = distribs.uniqueIdDist.GetExpectedCost(), classCost = distribs.classDist.GetExpectedCost(), newUnitCost = idCost + classCost;
+        float idCost = distribs.uniqueIdDist.GetExpectedCost(), classCost = distribs.objectClassDist.GetExpectedCost(), newUnitCost = idCost + classCost;
         double avgNewUnits = distribs.newObjectCountDist.GetAverageValue();
 
         float headerCost = 0;
@@ -76,14 +76,14 @@ namespace netcode
         printf("    # per frame:        %f objects\n", distribs.delObjectCountDist.GetAverageValue());
         printf("    object index:       ??? bits\n\n");
 
-        for(size_t i=0; i<protocol.classes.size(); ++i)
+        for(size_t i=0; i<protocol.objectClasses.size(); ++i)
         {
-            if(distribs.classDist.GetTrueProbability(i) == 0) continue;
-            printf("class %d: (%f%%)\n", i, distribs.classDist.GetTrueProbability(i) * 100);
+            if(distribs.objectClassDist.GetTrueProbability(i) == 0) continue;
+            printf("object class %d: (%f%%)\n", i, distribs.objectClassDist.GetTrueProbability(i) * 100);
             float totalCost = 0;
-            for(size_t j=0; j<protocol.classes[i]->fields.size(); ++j)
+            for(size_t j=0; j<protocol.objectClasses[i]->fields.size(); ++j)
             {
-                auto & dist = distribs.intFieldDists[protocol.classes[i]->fields[j]->uniqueId];
+                auto & dist = distribs.intFieldDists[protocol.objectClasses[i]->fields[j]->uniqueId];
                 int best = dist.GetBestDistribution(4);
                 float cost = dist.dists[best].GetExpectedCost();
                 printf("  field %d: %f bits ", j, cost);
@@ -98,6 +98,21 @@ namespace netcode
                 totalCost += cost;
             }
             printf("  total: %f bits per object\n\n", totalCost);
+        }
+
+        for(size_t i=0; i<protocol.eventClasses.size(); ++i)
+        {
+            if(distribs.eventClassDist.GetTrueProbability(i) == 0) continue;
+            printf("event class %d: (%f%%)\n", i, distribs.eventClassDist.GetTrueProbability(i) * 100);
+            float totalCost = 0;
+            for(size_t j=0; j<protocol.eventClasses[i]->fields.size(); ++j)
+            {
+                auto & dist = distribs.intFieldDists[protocol.eventClasses[i]->fields[j]->uniqueId].dists[0];
+                float cost = dist.GetExpectedCost();
+                printf("  field %d: %f bits\n", j, cost);
+                totalCost += cost;
+            }
+            printf("  total: %f bits per event\n\n", totalCost);
         }
     }
 }

@@ -36,7 +36,8 @@ struct NCprotocol
 {
     int                      maxFrameDelta;  // Maximum difference in frame numbers for frames used in delta compression
     size_t                   numIntFields;   // Number of FieldDistributions used in this protocol
-    std::vector<NCclass *>   classes;        // Classes of this protocol
+    std::vector<NCclass *>   objectClasses;  // Classes used for persistent objects
+    std::vector<NCclass *>   eventClasses;   // Classes used for instantaneous events
 
     NCprotocol(int maxFrameDelta);
 };
@@ -48,10 +49,10 @@ namespace netcode
         std::vector<FieldDistribution> intFieldDists;
 	    IntegerDistribution eventCountDist, newObjectCountDist, delObjectCountDist;
         IntegerDistribution uniqueIdDist;
-        SymbolDistribution classDist;
+        SymbolDistribution objectClassDist, eventClassDist;
 
         Distribs() {}
-        Distribs(const NCprotocol & protocol) : intFieldDists(protocol.numIntFields), classDist(protocol.classes.size()) {}
+        Distribs(const NCprotocol & protocol) : intFieldDists(protocol.numIntFields), objectClassDist(protocol.objectClasses.size()), eventClassDist(protocol.eventClasses.size()) {}
     };
 }
 
