@@ -141,23 +141,10 @@ void LocalSet::ProduceUpdate(ArithmeticEncoder & encoder, NCpeer * peer)
     }
 
 	// Encode updates for each view
-    auto state = auth->GetFrameState(frameset.GetCurrentFrame());
+    auto state = auth->frameState.find(frameset.GetCurrentFrame())->second.data();
     for(const auto & record : records)
     {
-        if(record.IsLive(frameset.GetCurrentFrame()))
-        {
-            frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
-
-            for(auto field : record.object->cl->varRefs)
-            {
-                auto offset = record.object->varStateOffset + field->dataOffset;
-                auto value = reinterpret_cast<const NCobject * const &>(state[offset]);
-                auto prevValue = record.IsLive(frameset.GetPreviousFrame()) ? reinterpret_cast<const NCobject * const &>(auth->GetFrameState(frameset.GetPreviousFrame())[offset]) : nullptr;
-                auto id = peer->GetNetId(value, frameset.GetCurrentFrame());
-                auto prevId = peer->GetNetId(prevValue, frameset.GetPreviousFrame());
-                distribs.uniqueIdDist.EncodeAndTally(encoder, id-prevId);
-            }
-        }
+        if(record.IsLive(frameset.GetCurrentFrame())) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state, *peer);
     }
 }
 

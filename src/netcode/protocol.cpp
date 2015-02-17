@@ -103,7 +103,7 @@ int Frameset::GetSampleCount(int frameAdded) const
     return 0; 
 }
 
-void Frameset::EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state) const
+void Frameset::EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state, const NCpeer & peer) const
 {
     const int sampleCount = GetSampleCount(frameAdded);
     for(auto field : cl.varFields)
@@ -112,6 +112,14 @@ void Frameset::EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distri
         for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
 	}    
+
+    for(auto field : cl.varRefs)
+    {
+        auto offset = stateOffset + field->dataOffset;
+        auto id = peer.GetNetId(reinterpret_cast<const NCobject * const &>(state[offset]), frame);
+        auto prevId = sampleCount ? peer.GetNetId(reinterpret_cast<const NCobject * const &>(prevStates[0][offset]), prevFrames[0]) : 0;
+        distribs.uniqueIdDist.EncodeAndTally(encoder, id-prevId);
+    }
 }
 
 void Frameset::DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state) const

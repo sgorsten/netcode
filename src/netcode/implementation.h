@@ -46,8 +46,8 @@ namespace netcode
         int GetPreviousFrame() const { return prevFrames[0]; }
         int GetEarliestFrame() const { return prevFrames[3]; }
 
-        void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state) const;
-        void DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state) const;
+        void EncodeAndTallyObject(ArithmeticEncoder & encoder, Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state, const NCpeer & peer) const;
+        void DecodeAndTallyObject(ArithmeticDecoder & decoder, Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state) const;
     };
 
     void EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta);
@@ -88,7 +88,7 @@ namespace netcode
         struct Frame;
 
         const NCprotocol * protocol;
-        netcode::RangeAllocator stateAlloc;
+        RangeAllocator stateAlloc;
         std::map<int, Frame> frames;
         std::map<int, std::vector<uint8_t>> frameStates;
         std::map<int, std::weak_ptr<Object>> id2View;
@@ -168,11 +168,11 @@ struct NCauthority
 
     void PurgeReferencesToObject(NCobject * object);
 
-    const uint8_t * GetFrameState(int frame) const
+    /*const uint8_t * GetFrameState(int frame) const
     {
         auto it = frameState.find(frame);
         return it != end(frameState) ? it->second.data() : nullptr;
-    }
+    }*/
 
     NCpeer * CreatePeer();
 	netcode::LocalObject * CreateObject(const NCclass * objectClass);
