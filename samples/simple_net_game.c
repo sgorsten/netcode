@@ -24,6 +24,7 @@ NCprotocol * protocol;
 NCclass * teamClass, * unitClass, * deathEvent;
 NCint * teamId;
 NCint * unitTeamId, * unitHp, * unitX, * unitY;
+NCref * unitTarget;
 NCint * deathX, * deathY;
 
 struct Server * CreateServer(int port);
@@ -52,6 +53,7 @@ int main(int argc, char * argv[])
     unitHp = ncCreateInt(unitClass, 0);
     unitX = ncCreateInt(unitClass, 0);
     unitY = ncCreateInt(unitClass, 0);
+    unitTarget = ncCreateRef(unitClass);
     deathEvent = ncCreateClass(protocol, NC_EVENT_CLASS_FLAG);
     deathX = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
     deathY = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
@@ -233,6 +235,7 @@ void UpdateServer(struct Server * s, float timestep)
                 best = dist;
             }
         }
+        ncSetObjectRef(s->units[i].nobj, unitTarget, s->units[target].nobj);
 
         /* pursue target */
         dx = s->units[target].x - s->units[i].x;
@@ -404,21 +407,32 @@ void UpdateClient(struct Client * c)
     /* draw units */
     for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->peer, i);
-        if(ncGetViewClass(nview) == unitClass)
+        const NCview * view = ncGetView(c->peer, i), * view2;
+        if(ncGetViewClass(view) == unitClass)
         {
-            /* draw colored circle to represent unit */
-            x = ncGetViewInt(nview, unitX);
-            y = ncGetViewInt(nview, unitY);
-            switch(ncGetViewInt(nview, unitTeamId))
+            x = ncGetViewInt(view, unitX);
+            y = ncGetViewInt(view, unitY);
+            switch(ncGetViewInt(view, unitTeamId))
             {
             case 0: glColor3f(0,1,1); break;
             case 1: glColor3f(1,0,0); break;
             }
+            
+            /* draw line to indicate unit's current target */
+            if(view2 = ncGetViewRef(view, unitTarget))
+            {
+                int x2 = ncGetViewInt(view2, unitX), y2 = ncGetViewInt(view2, unitY);
+                glBegin(GL_LINES);
+                glVertex2i(x,y);
+                glVertex2i(x2,y2);
+                glEnd();
+            }
+
+            /* draw colored circle to represent unit */
             DrawCircle(x, y, 10);
                 
             /* draw unit health bar */
-            h = ncGetViewInt(nview, unitHp);
+            h = ncGetViewInt(view, unitHp);
             glBegin(GL_QUADS);
             glColor3f(0,1,0);
             glVertex2i(x-10, y-13);
@@ -432,10 +446,10 @@ void UpdateClient(struct Client * c)
             glVertex2i(x-10+(h*20/100), y-11);
             glEnd();
         }
-        else if(ncGetViewClass(nview) == deathEvent)
+        else if(ncGetViewClass(view) == deathEvent)
         {
-            x = ncGetViewInt(nview, deathX);
-            y = ncGetViewInt(nview, deathY);
+            x = ncGetViewInt(view, deathX);
+            y = ncGetViewInt(view, deathY);
             glColor3f(1,1,0);
             DrawCircle(x, y, 20);
         }

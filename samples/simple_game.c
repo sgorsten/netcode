@@ -140,13 +140,13 @@ int main(int argc, char * argv[])
 
         /* simulate network traffic */
         updateBlob = ncProduceMessage(serverPeer);
-        if(1) //rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from server to client via UDP */
+        if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from server to client via UDP */
         {
             ncConsumeMessage(clientPeer, ncGetBlobData(updateBlob), ncGetBlobSize(updateBlob));
             
             ncPublishFrame(clientAuth);
             responseBlob = ncProduceMessage(clientPeer);
-            if(1) //rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from client to server via UDP */
+            if(rand() % 100 > 20) /* simulate 20% packet loss, in a real app, blob would be transmitted from client to server via UDP */
             {
                 ncConsumeMessage(serverPeer, ncGetBlobData(responseBlob), ncGetBlobSize(responseBlob));
             }
