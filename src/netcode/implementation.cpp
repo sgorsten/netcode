@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "server.h"
+#include "object.h"
 
 struct NCblob { std::vector<uint8_t> memory; };
 

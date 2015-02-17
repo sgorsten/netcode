@@ -5,8 +5,8 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#ifndef NETCODE_SERVER_H
-#define NETCODE_SERVER_H
+#ifndef NETCODE_OBJECT_H
+#define NETCODE_OBJECT_H
 
 #include "protocol.h"
 

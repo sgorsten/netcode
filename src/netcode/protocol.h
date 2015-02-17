@@ -62,6 +62,9 @@ namespace netcode
         void EncodeAndTallyObjectConstants(ArithmeticEncoder & encoder, const NCclass & cl, const std::vector<uint8_t> & state);
         std::vector<uint8_t> DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, const NCclass & cl);
     };
+
+    void EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta);
+    std::vector<int> DecodeFramelist(ArithmeticDecoder & decoder, size_t maxFrames, int maxFrameDelta);
 }
 
 #endif

@@ -6,6 +6,7 @@
 // this software for any purpose, including commercial applications.
 
 #include "protocol.h"
+#include <cassert>
 
 using namespace netcode;
 
@@ -69,4 +70,31 @@ std::vector<uint8_t> Distribs::DecodeAndTallyObjectConstants(ArithmeticDecoder &
         reinterpret_cast<int &>(state[field->dataOffset]) = intConstDists[field->uniqueId].DecodeAndTally(decoder);
     }
     return state;
+}
+
+void netcode::EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta)
+{
+    assert(numFrames <= maxFrames);
+    EncodeUniform(encoder, numFrames, maxFrames+1);
+    if(numFrames) EncodeBits(encoder, frames[0], 32);
+    for(size_t i=1; i<numFrames; ++i)
+    {
+        auto delta = frames[i-1] - frames[i];
+        EncodeUniform(encoder, delta, maxFrameDelta+1);
+        maxFrameDelta -= delta;
+    }
+}
+
+std::vector<int> netcode::DecodeFramelist(ArithmeticDecoder & decoder, size_t maxFrames, int maxFrameDelta)
+{
+    std::vector<int> frames;
+    size_t numFrames = DecodeUniform(decoder, maxFrames+1);    
+    if(numFrames) frames.push_back(DecodeBits(decoder, 32));
+    for(size_t i=1; i<numFrames; ++i)
+    {
+        auto delta = DecodeUniform(decoder, maxFrameDelta+1);
+        frames.push_back(frames.back() - delta);
+        maxFrameDelta -= delta;
+    }
+    return frames;
 }

@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "server.h"
+#include "object.h"
 #include <cassert>
 
 using namespace netcode;
@@ -135,34 +135,15 @@ struct Frameset
     const uint8_t * prevStates[4];
     CurvePredictor predictors[5];
 
-    void RefreshPredictors()
+    Frameset(const std::vector<int> & frames) : frame(frames[0])
     {
+        for(size_t i=1; i<5; ++i) prevFrames[i-1] = i < frames.size() ? frames[i] : 0;
+
         predictors[0] = CurvePredictor();
         predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
         predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
         predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
         predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
-    }
-
-    void EncodeFrameList(ArithmeticEncoder & encoder, const NCprotocol & protocol)
-    {
-        EncodeBits(encoder, frame, 32);
-        for(int i=0; i<4; ++i)
-        {
-            code_t value = prevFrames[i] ? frame - prevFrames[i] : 0;
-            EncodeUniform(encoder, value, protocol.maxFrameDelta+1);
-        }
-    }
-
-    void DecodeFrameList(ArithmeticDecoder & decoder, const NCprotocol & protocol)
-    {
-        frame = DecodeBits(decoder, 32);
-        for(int i=0; i<4; ++i)
-        {
-            code_t value = DecodeUniform(decoder, protocol.maxFrameDelta+1);
-            prevFrames[i] = value ? frame - value : 0;
-        }
-        RefreshPredictors();
     }
 
     int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
@@ -216,10 +197,9 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
 void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 {
     const int mostRecentFrame = frames.empty() ? 0 : frames.rbegin()->first;
-
+    
     // Decode frameset
-    Frameset frameset;
-    frameset.DecodeFrameList(decoder, *protocol);
+    Frameset frameset(netcode::DecodeFramelist(decoder, 5, protocol->maxFrameDelta));
     if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
     for(int i=0; i<4; ++i)
     {
@@ -291,9 +271,10 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 void Client::ProduceResponse(ArithmeticEncoder & encoder) const
 {
     auto n = std::min(frames.size(), size_t(4));
-    EncodeUniform(encoder, n, 5);
+    int ackFrames[4];
     auto it = frames.rbegin();
-    for(int i=0; i<n; ++i, ++it) EncodeBits(encoder, it->first, 32);
+    for(size_t i=0; i<n; ++i, ++it) ackFrames[i] = it->first;
+    netcode::EncodeFramelist(encoder, ackFrames, n, 4, protocol->maxFrameDelta);
 }
 
 ////////////
@@ -350,19 +331,13 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 
 void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 {
-    Frameset frameset;
-    frameset.frame = auth->frame;
+    std::vector<int> frameList = {auth->frame};
+    int32_t cutoff = auth->frame - auth->protocol->maxFrameDelta;
+    for(auto frame : ackFrames) if(frame >= cutoff) frameList.push_back(frame); // TODO: Enforce this in PublishFrame instead
 
-    int32_t cutoff = frameset.frame - auth->protocol->maxFrameDelta;
-    for(size_t i=0; i<4; ++i)
-    {
-        frameset.prevFrames[i] = ackFrames.size() > i ? ackFrames[i] : 0;
-        if(frameset.prevFrames[i] < cutoff) frameset.prevFrames[i] = 0;
-    }
-    frameset.RefreshPredictors();
+    netcode::EncodeFramelist(encoder, frameList.data(), frameList.size(), 5, auth->protocol->maxFrameDelta);
 
-    // Encode frameset
-    frameset.EncodeFrameList(encoder, *auth->protocol);
+    Frameset frameset(frameList);
 
     // Obtain probability distributions for this frame
     auto & distribs = frameDistribs[frameset.frame];
@@ -379,7 +354,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         for(auto e : sendEvents)
         {
             distribs.eventClassDist.EncodeAndTally(encoder, e->cl->uniqueId);
-            distribs.EncodeAndTallyObjectConstants(encoder, *e->cl, e->constState.data());
+            distribs.EncodeAndTallyObjectConstants(encoder, *e->cl, e->constState);
         }
     }
 
@@ -409,7 +384,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     {
         distribs.objectClassDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
-        distribs.EncodeAndTallyObjectConstants(encoder, *record->object->cl, record->object->constState.data());
+        distribs.EncodeAndTallyObjectConstants(encoder, *record->object->cl, record->object->constState);
     }
 
     auto state = auth->GetFrameState(frameset.frame);
@@ -422,8 +397,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 void NCpeer::ConsumeResponse(ArithmeticDecoder & decoder) 
 {
     if(!auth) return;
-    std::vector<int> newAck;
-    for(int i=0, n=DecodeUniform(decoder, 5); i!=n; ++i) newAck.push_back(DecodeBits(decoder, 32));
+    auto newAck = netcode::DecodeFramelist(decoder, 4, auth->protocol->maxFrameDelta);
     if(newAck.empty()) return;
     if(ackFrames.empty() || ackFrames.front() < newAck.front()) ackFrames = newAck;
 }
