@@ -72,6 +72,53 @@ std::vector<uint8_t> Distribs::DecodeAndTallyObjectConstants(ArithmeticDecoder &
     return state;
 }
 
+Frameset::Frameset(const std::vector<int> & frames, const std::map<int, std::vector<uint8_t>> & frameStates) : frame(frames[0])
+{
+    for(size_t i=0; i<4; ++i)
+    {
+        prevFrames[i] = i+1 < frames.size() ? frames[i+1] : 0;
+        auto it = frameStates.find(prevFrames[i]);
+        prevStates[i] = it != end(frameStates) ? it->second.data() : nullptr;
+    }
+
+    predictors[0] = CurvePredictor();
+    predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
+    predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
+    predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
+    predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
+}
+
+int Frameset::GetSampleCount(int frameAdded) const 
+{ 
+    for(int i=4; i>0; --i)
+    {
+        if(frameAdded <= prevFrames[i-1]) return i; 
+    }
+    return 0; 
+}
+
+void Frameset::EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state) const
+{
+    const int sampleCount = GetSampleCount(frameAdded);
+    for(auto field : cl.varFields)
+	{
+        int offset = stateOffset + field->dataOffset, prevValues[4];
+        for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+		distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
+	}    
+}
+
+void Frameset::DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state) const
+{
+    const int sampleCount = GetSampleCount(frameAdded);
+    for(auto field : cl.varFields)
+	{
+        int offset = stateOffset + field->dataOffset, prevValues[4];
+        for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
+		reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
+	}    
+}
+
 void netcode::EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta)
 {
     assert(numFrames <= maxFrames);

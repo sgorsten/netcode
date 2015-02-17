@@ -63,6 +63,24 @@ namespace netcode
         std::vector<uint8_t> DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, const NCclass & cl);
     };
 
+    class Frameset
+    {
+        int32_t frame, prevFrames[4];
+        const uint8_t * prevStates[4];
+        CurvePredictor predictors[5];
+
+        int GetSampleCount(int frameAdded) const;
+    public:
+        Frameset(const std::vector<int> & frames, const std::map<int, std::vector<uint8_t>> & frameStates);
+
+        int GetCurrentFrame() const { return frame; }
+        int GetPreviousFrame() const { return prevFrames[0]; }
+        int GetEarliestFrame() const { return prevFrames[3]; }
+
+        void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state) const;
+        void DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state) const;
+    };
+
     void EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta);
     std::vector<int> DecodeFramelist(ArithmeticDecoder & decoder, size_t maxFrames, int maxFrameDelta);
 }

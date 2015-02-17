@@ -41,7 +41,7 @@ namespace netcode
     static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->constFields) + MemUsage(cl->varFields); }
     static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->objectClasses) + MemUsage(p->eventClasses); }
     static size_t MemUsage(const NCobject * obj) { return sizeof(NCobject); }
-    static size_t MemUsage(const Client::Frame & f) { return MemUsage(f.views) + MemUsage(f.state) + MemUsage(f.distribs); }
+    static size_t MemUsage(const Client::Frame & f) { return MemUsage(f.views) + MemUsage(f.distribs); }
     static size_t MemUsage(const Client & client) { return MemUsage(client.frames); }
     static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs) + MemUsage(peer->client); }
     static size_t MemUsage(const NCview * peer) { return sizeof(NCview); }    

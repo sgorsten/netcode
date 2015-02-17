@@ -129,48 +129,6 @@ void NCobject::SetIntField(const NCint * field, int value)
 // Client //
 ////////////
 
-struct Frameset
-{
-    int32_t frame, prevFrames[4];
-    const uint8_t * prevStates[4];
-    CurvePredictor predictors[5];
-
-    Frameset(const std::vector<int> & frames) : frame(frames[0])
-    {
-        for(size_t i=1; i<5; ++i) prevFrames[i-1] = i < frames.size() ? frames[i] : 0;
-
-        predictors[0] = CurvePredictor();
-        predictors[1] = prevFrames[0] != 0 ? MakeConstantPredictor() : predictors[0];
-        predictors[2] = prevFrames[1] != 0 ? MakeLinearPredictor(frame-prevFrames[0], frame-prevFrames[1]) : predictors[1];
-        predictors[3] = prevFrames[2] != 0 ? MakeQuadraticPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2]) : predictors[1];
-        predictors[4] = prevFrames[3] != 0 ? MakeCubicPredictor(frame-prevFrames[0], frame-prevFrames[1], frame-prevFrames[2], frame-prevFrames[3]) : predictors[1];
-    }
-
-    int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
-
-    void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
-    {
-        const int sampleCount = GetSampleCount(frameAdded);
-        for(auto field : cl.varFields)
-		{
-            int offset = stateOffset + field->dataOffset, prevValues[4];
-            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-		    distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
-		}    
-    }
-
-    void DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state)
-    {
-        const int sampleCount = GetSampleCount(frameAdded);
-        for(auto field : cl.varFields)
-		{
-            int offset = stateOffset + field->dataOffset, prevValues[4];
-            for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
-		    reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
-		}    
-    }
-};
-
 Client::Client(const NCprotocol * protocol) : protocol(protocol)
 {
 
@@ -199,34 +157,30 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
     const int mostRecentFrame = frames.empty() ? 0 : frames.rbegin()->first;
     
     // Decode frameset
-    Frameset frameset(netcode::DecodeFramelist(decoder, 5, protocol->maxFrameDelta));
-    if(!frames.empty() && frames.rbegin()->first >= frameset.frame) return; // Don't bother decoding messages for old frames
-    for(int i=0; i<4; ++i)
-    {
-        frameset.prevStates[i] = GetFrameState(frameset.prevFrames[i]);
-        if(frameset.prevFrames[i] != 0 && frameset.prevStates[i] == nullptr) return; // Malformed packet
-    }
+    const Frameset frameset(netcode::DecodeFramelist(decoder, 5, protocol->maxFrameDelta), frameStates);
+    if(!frames.empty() && frames.rbegin()->first >= frameset.GetCurrentFrame()) return; // Don't bother decoding messages for old frames
+    //for(int i=0; i<4; ++i) if(frameset.prevFrames[i] != 0 && frameset.prevStates[i] == nullptr) return; // Malformed packet
 
     // Prepare probability distributions
-    auto & distribs = frames[frameset.frame].distribs;
-    auto & views = frames[frameset.frame].views;
-    if(frameset.prevFrames[0] != 0)
+    auto & frame = frames[frameset.GetCurrentFrame()];
+    if(frameset.GetPreviousFrame() != 0)
     {
-        distribs = frames[frameset.prevFrames[0]].distribs;
-        views = frames[frameset.prevFrames[0]].views;
+        frame.distribs = frames[frameset.GetPreviousFrame()].distribs;
+        frame.views = frames[frameset.GetPreviousFrame()].views;
+        // NOTE: Deliberately not copying events from previous frame
     }
-    else distribs = Distribs(*protocol);
+    else frame.distribs = Distribs(*protocol);
 
     // Decode events that occurred in each frame between the last acknowledged frame and the current frame
-    auto & events = frames[frameset.frame].events;
-    for(int i=frameset.prevFrames[0]+1; i<=frameset.frame; ++i)
+    auto & events = frames[frameset.GetCurrentFrame()].events;
+    for(int i=frameset.GetPreviousFrame()+1; i<=frameset.GetCurrentFrame(); ++i)
     {
         // All of the events decoded in here happen on frame i
-        for(int j=0, n = distribs.eventCountDist.DecodeAndTally(decoder); j<n; ++j)
+        for(int j=0, n = frame.distribs.eventCountDist.DecodeAndTally(decoder); j<n; ++j)
         {
-            auto classIndex = distribs.eventClassDist.DecodeAndTally(decoder);
+            auto classIndex = frame.distribs.eventClassDist.DecodeAndTally(decoder);
             auto cl = protocol->eventClasses[classIndex];
-            auto state = distribs.DecodeAndTallyObjectConstants(decoder, *cl);
+            auto state = frame.distribs.DecodeAndTallyObjectConstants(decoder, *cl);
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
                 events.push_back(std::unique_ptr<NCview>(new NCview(this, cl, i, std::move(state))));
@@ -235,32 +189,34 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
     }
 
     // Decode indices of deleted objects
-    int delObjects = distribs.delObjectCountDist.DecodeAndTally(decoder);
+    int delObjects = frame.distribs.delObjectCountDist.DecodeAndTally(decoder);
     for(int i=0; i<delObjects; ++i)
     {
-        int index = DecodeUniform(decoder, views.size());
-        views[index].reset();
+        int index = DecodeUniform(decoder, frame.views.size());
+        frame.views[index].reset();
     }
-    EraseIf(views, [](const std::shared_ptr<NCview> & v) { return !v; });
+    EraseIf(frame.views, [](const std::shared_ptr<NCview> & v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
-	int newObjects = distribs.newObjectCountDist.DecodeAndTally(decoder);
+	int newObjects = frame.distribs.newObjectCountDist.DecodeAndTally(decoder);
 	for (int i = 0; i < newObjects; ++i)
 	{
-        auto classIndex = distribs.objectClassDist.DecodeAndTally(decoder);
-        auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
-        auto state = distribs.DecodeAndTallyObjectConstants(decoder, *protocol->objectClasses[classIndex]);
-        views.push_back(CreateView(classIndex, uniqueId, frameset.frame, move(state)));
+        auto classIndex = frame.distribs.objectClassDist.DecodeAndTally(decoder);
+        auto uniqueId = frame.distribs.uniqueIdDist.DecodeAndTally(decoder);
+        auto state = frame.distribs.DecodeAndTallyObjectConstants(decoder, *protocol->objectClasses[classIndex]);
+        frame.views.push_back(CreateView(classIndex, uniqueId, frameset.GetCurrentFrame(), move(state)));
 	}
 
-    auto & state = frames[frameset.frame].state;
+    auto & state = frameStates[frameset.GetCurrentFrame()];
     state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
-	for(auto view : views) frameset.DecodeAndTallyObject(decoder, distribs, *view->cl, view->varStateOffset, view->frameAdded, state.data());
+	for(auto view : frame.views) frameset.DecodeAndTallyObject(decoder, frame.distribs, *view->cl, view->varStateOffset, view->frameAdded, state.data());
 
     // Server will never again refer to frames before this point
-    frames.erase(begin(frames), frames.lower_bound(std::min(frameset.frame - protocol->maxFrameDelta, frameset.prevFrames[3])));
+    int lastFrameToKeep = std::min(frameset.GetCurrentFrame() - protocol->maxFrameDelta, frameset.GetEarliestFrame());
+    EraseBefore(frames, lastFrameToKeep);
+    EraseBefore(frameStates, lastFrameToKeep);
     for(auto it = id2View.begin(); it != end(id2View); )
     {
         if(it->second.expired()) it = id2View.erase(it);
@@ -336,17 +292,16 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     for(auto frame : ackFrames) if(frame >= cutoff) frameList.push_back(frame); // TODO: Enforce this in PublishFrame instead
 
     netcode::EncodeFramelist(encoder, frameList.data(), frameList.size(), 5, auth->protocol->maxFrameDelta);
-
-    Frameset frameset(frameList);
+    const Frameset frameset(frameList, auth->frameState);
 
     // Obtain probability distributions for this frame
-    auto & distribs = frameDistribs[frameset.frame];
-    if(frameset.prevFrames[0] != 0) distribs = frameDistribs[frameset.prevFrames[0]];
+    auto & distribs = frameDistribs[frameset.GetCurrentFrame()];
+    if(frameset.GetPreviousFrame() != 0) distribs = frameDistribs[frameset.GetPreviousFrame()];
     else distribs = Distribs(*auth->protocol);
 
     // Encode visible events that occurred in each frame between the last acknowledged frame and the current frame
     std::vector<const NCobject *> sendEvents;
-    for(int i=frameset.prevFrames[0]+1; i<=frameset.frame; ++i)
+    for(int i=frameset.GetPreviousFrame()+1; i<=frameset.GetCurrentFrame(); ++i)
     {
         sendEvents.clear();
         for(auto e : auth->eventHistory.find(i)->second) if(visibleEvents.find(e) != end(visibleEvents)) sendEvents.push_back(e);
@@ -364,12 +319,12 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     int index = 0;
     for(const auto & record : records)
     {
-        if(record.IsLive(frameset.prevFrames[0]))
+        if(record.IsLive(frameset.GetPreviousFrame()))
         {
-            if(!record.IsLive(frameset.frame)) deletedIndices.push_back(index);  // If it has been removed, store its index
+            if(!record.IsLive(frameset.GetCurrentFrame())) deletedIndices.push_back(index);  // If it has been removed, store its index
             ++index;                                                    // Either way, object was live, so it used an index
         }
-        else if(record.IsLive(frameset.frame)) // If object was added between last frame and now
+        else if(record.IsLive(frameset.GetCurrentFrame())) // If object was added between last frame and now
         {
             newObjects.push_back(&record);
         }
@@ -387,11 +342,9 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         distribs.EncodeAndTallyObjectConstants(encoder, *record->object->cl, record->object->constState);
     }
 
-    auto state = auth->GetFrameState(frameset.frame);
-    for(int i=0; i<4; ++i) frameset.prevStates[i] = auth->GetFrameState(frameset.prevFrames[i]);
-
 	// Encode updates for each view
-    for(const auto & record : records) if(record.IsLive(frameset.frame)) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
+    auto state = auth->GetFrameState(frameset.GetCurrentFrame());
+    for(const auto & record : records) if(record.IsLive(frameset.GetCurrentFrame())) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
 }
 
 void NCpeer::ConsumeResponse(ArithmeticDecoder & decoder) 

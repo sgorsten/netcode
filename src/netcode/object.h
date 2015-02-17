@@ -63,24 +63,24 @@ struct netcode::Client
     {
         std::vector<std::shared_ptr<NCview>> views;
         std::vector<std::unique_ptr<NCview>> events;
-        std::vector<uint8_t> state;
         Distribs distribs;
     };
 
     const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
     std::map<int, Frame> frames;
+    std::map<int, std::vector<uint8_t>> frameStates;
     std::map<int, std::weak_ptr<NCview>> id2View;
 
 	Client(const NCprotocol * protocol);
 
     std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
-    const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
+    const uint8_t * GetCurrentState() const { return frameStates.rbegin()->second.data(); }
     const uint8_t * GetFrameState(int frame) const
     {
-        auto it = frames.find(frame);
-        return it != end(frames) ? it->second.state.data() : nullptr;
+        auto it = frameStates.find(frame);
+        return it != end(frameStates) ? it->second.data() : nullptr;
     }
 
 	void ConsumeUpdate(netcode::ArithmeticDecoder & decoder);
