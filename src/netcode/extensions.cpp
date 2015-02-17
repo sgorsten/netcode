@@ -10,7 +10,7 @@
 
 namespace netcode
 {
-    template<class A, class B> size_t MemUsage(const std::pair<A,B> & pair) { return MemUsage(pair.first) + MemUsage(pair.second); }
+    /*template<class A, class B> size_t MemUsage(const std::pair<A,B> & pair) { return MemUsage(pair.first) + MemUsage(pair.second); }
     template<class T> size_t MemUsage(const std::shared_ptr<T> & ptr) { return ptr ? MemUsage(ptr.get()) : 0; }
     template<class T, int N> size_t MemUsage(const T (& arr)[N])
     {
@@ -44,7 +44,7 @@ namespace netcode
     static size_t MemUsage(const Client::Frame & f) { return MemUsage(f.views) + MemUsage(f.distribs); }
     static size_t MemUsage(const Client & client) { return MemUsage(client.frames); }
     static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs) + MemUsage(peer->client); }
-    static size_t MemUsage(const NCview * peer) { return sizeof(NCview); }    
+    static size_t MemUsage(const netcode::RemoteObject * peer) { return sizeof(NCview); }    */
 
     static void PrintEfficiency(const NCclass & cl, const Distribs & distribs)
     {
@@ -126,7 +126,7 @@ using namespace netcode;
 
 int ncxGetMemoryUsage(NCauthority * authority)
 {
-    return sizeof(NCauthority) + MemUsage(authority->protocol) + MemUsage(authority->objects) + MemUsage(authority->peers) + MemUsage(authority->state) + MemUsage(authority->frameState);
+    return 0; //sizeof(NCauthority) + MemUsage(authority->protocol) + MemUsage(authority->objects) + MemUsage(authority->peers) + MemUsage(authority->state) + MemUsage(authority->frameState);
 }
 
 void ncxPrintCodeEfficiency (NCpeer * peer)

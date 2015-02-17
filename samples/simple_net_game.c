@@ -24,6 +24,7 @@ NCprotocol * protocol;
 NCclass * teamClass, * unitClass, * deathEvent;
 NCint * teamId;
 NCint * unitTeamId, * unitHp, * unitX, * unitY;
+NCref * unitTarget;
 NCint * deathX, * deathY;
 
 struct Server * CreateServer(int port);
@@ -52,6 +53,7 @@ int main(int argc, char * argv[])
     unitHp = ncCreateInt(unitClass, 0);
     unitX = ncCreateInt(unitClass, 0);
     unitY = ncCreateInt(unitClass, 0);
+    unitTarget = ncCreateRef(unitClass);
     deathEvent = ncCreateClass(protocol, NC_EVENT_CLASS_FLAG);
     deathX = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
     deathY = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
@@ -126,7 +128,7 @@ void SpawnUnit(struct Server * s, int i)
     s->units[i].hp = 100;
     s->units[i].x = (float)(rand() % (WINDOW_WIDTH/4) + s->units[i].team * (WINDOW_WIDTH*3/4));
     s->units[i].y = (float)(rand() % WINDOW_HEIGHT);
-    s->units[i].nobj = ncCreateObject(s->auth, unitClass);
+    s->units[i].nobj = ncCreateLocalObject(s->auth, unitClass);
 }
 
 struct Server * CreateServer(int port)
@@ -149,7 +151,7 @@ struct Server * CreateServer(int port)
 
     for(i=0; i<2; ++i)
     {
-        s->nteams[i] = ncCreateObject(s->auth, teamClass);
+        s->nteams[i] = ncCreateLocalObject(s->auth, teamClass);
         ncSetObjectInt(s->nteams[i], teamId, i);
     }
 
@@ -167,7 +169,7 @@ void DestroyServer(struct Server * s)
 int IsVisible(struct Server * s, int x, int y, int team)
 {
     int i;
-    for(int i=0; i<20; ++i)
+    for(i=0; i<20; ++i)
     {
         float dx, dy;
         if(s->units[i].team != team) continue;
@@ -233,6 +235,7 @@ void UpdateServer(struct Server * s, float timestep)
                 best = dist;
             }
         }
+        ncSetObjectRef(s->units[i].nobj, unitTarget, s->units[target].nobj);
 
         /* pursue target */
         dx = s->units[target].x - s->units[i].x;
@@ -249,7 +252,7 @@ void UpdateServer(struct Server * s, float timestep)
             if(s->units[target].hp < 1) /* if target is dead */
             {
                 /* create an event to indicate the death of this unit */
-                NCobject * e = ncCreateObject(s->auth, deathEvent);
+                NCobject * e = ncCreateLocalObject(s->auth, deathEvent);
                 ncSetObjectInt(e, deathX, s->units[target].x);
                 ncSetObjectInt(e, deathY, s->units[target].y);
                 for(j=0; j<s->numPeers; ++j) ncSetVisibility(s->peers[j].npeer, e, s->units[target].team == j%2 || IsVisible(s, s->units[target].x, s->units[target].y, !s->units[target].team));
@@ -379,10 +382,10 @@ void UpdateClient(struct Client * c)
     sendto(c->clientSocket, (const char *)ncGetBlobData(nresponse), ncGetBlobSize(nresponse), 0, (const SOCKADDR *)&c->serverAddr, sizeof(c->serverAddr));
 
     /* determine team */
-    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
+    for(i=0, n=ncGetRemoteObjectCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->peer, i);
-        if(ncGetViewClass(nview) == teamClass) c->team = ncGetViewInt(nview, teamId);
+        const NCobject * nview = ncGetRemoteObject(c->peer, i);
+        if(ncGetObjectClass(nview) == teamClass) c->team = ncGetObjectInt(nview, teamId);
     }
 
     /* redraw client */        
@@ -392,33 +395,44 @@ void UpdateClient(struct Client * c)
 
     /* draw unit visibility */
     glColor3f(0.5f,0.3f,0.1f);
-    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
+    for(i=0, n=ncGetRemoteObjectCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->peer, i);
-        if(ncGetViewClass(nview) == unitClass && ncGetViewInt(nview, unitTeamId) == c->team)
+        const NCobject * nview = ncGetRemoteObject(c->peer, i);
+        if(ncGetObjectClass(nview) == unitClass && ncGetObjectInt(nview, unitTeamId) == c->team)
         {
-            DrawCircle(ncGetViewInt(nview, unitX), ncGetViewInt(nview, unitY), 120);
+            DrawCircle(ncGetObjectInt(nview, unitX), ncGetObjectInt(nview, unitY), 120);
         }
     }
 
     /* draw units */
-    for(i=0, n=ncGetViewCount(c->peer); i<n; ++i)
+    for(i=0, n=ncGetRemoteObjectCount(c->peer); i<n; ++i)
     {
-        const NCview * nview = ncGetView(c->peer, i);
-        if(ncGetViewClass(nview) == unitClass)
+        const NCobject * view = ncGetRemoteObject(c->peer, i), * view2;
+        if(ncGetObjectClass(view) == unitClass)
         {
-            /* draw colored circle to represent unit */
-            x = ncGetViewInt(nview, unitX);
-            y = ncGetViewInt(nview, unitY);
-            switch(ncGetViewInt(nview, unitTeamId))
+            x = ncGetObjectInt(view, unitX);
+            y = ncGetObjectInt(view, unitY);
+            switch(ncGetObjectInt(view, unitTeamId))
             {
             case 0: glColor3f(0,1,1); break;
             case 1: glColor3f(1,0,0); break;
             }
+            
+            /* draw line to indicate unit's current target */
+            if(view2 = ncGetObjectRef(view, unitTarget))
+            {
+                int x2 = ncGetObjectInt(view2, unitX), y2 = ncGetObjectInt(view2, unitY);
+                glBegin(GL_LINES);
+                glVertex2i(x,y);
+                glVertex2i(x2,y2);
+                glEnd();
+            }
+
+            /* draw colored circle to represent unit */
             DrawCircle(x, y, 10);
                 
             /* draw unit health bar */
-            h = ncGetViewInt(nview, unitHp);
+            h = ncGetObjectInt(view, unitHp);
             glBegin(GL_QUADS);
             glColor3f(0,1,0);
             glVertex2i(x-10, y-13);
@@ -432,10 +446,10 @@ void UpdateClient(struct Client * c)
             glVertex2i(x-10+(h*20/100), y-11);
             glEnd();
         }
-        else if(ncGetViewClass(nview) == deathEvent)
+        else if(ncGetObjectClass(view) == deathEvent)
         {
-            x = ncGetViewInt(nview, deathX);
-            y = ncGetViewInt(nview, deathY);
+            x = ncGetObjectInt(view, deathX);
+            y = ncGetObjectInt(view, deathY);
             glColor3f(1,1,0);
             DrawCircle(x, y, 20);
         }

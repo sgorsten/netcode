@@ -30,6 +30,7 @@ struct Protocol
     NCclass * characterCl, * inputCl;
     NCint * characterPosX, * characterPosY;
     NCint * inputTargetX, * inputTargetY;
+    NCref * characterTargetChar, * inputTargetChar;
 
     Protocol()
     {
@@ -38,10 +39,12 @@ struct Protocol
         characterCl = ncCreateClass(protocol, 0);
         characterPosX = ncCreateInt(characterCl, 0);
         characterPosY = ncCreateInt(characterCl, 0);
+        characterTargetChar = ncCreateRef(characterCl);
 
         inputCl = ncCreateClass(protocol, 0);
         inputTargetX = ncCreateInt(inputCl, 0);
-        inputTargetY = ncCreateInt(inputCl, 0);    
+        inputTargetY = ncCreateInt(inputCl, 0);
+        inputTargetChar = ncCreateRef(inputCl);
     }
 };
 
@@ -145,7 +148,7 @@ Client::Client(const Protocol & protocol, GLFWwindow * win) : protocol(protocol)
     addr.sin_port = htons(12345);
 
     auth = ncCreateAuthority(protocol.protocol);
-    input = ncCreateObject(auth, protocol.inputCl);
+    input = ncCreateLocalObject(auth, protocol.inputCl);
     ncSetObjectInt(input, protocol.inputTargetX, 320);
     ncSetObjectInt(input, protocol.inputTargetY, 240);
     
@@ -158,13 +161,13 @@ void Client::Draw() const
     // Render client-side views of server-side objects
     glPushMatrix();
     glOrtho(0, 640, 480, 0, -1, +1);
-    for(int i=0, n=ncGetViewCount(peer); i<n; ++i)
+    for(int i=0, n=ncGetRemoteObjectCount(peer); i<n; ++i)
     {
-        auto view = ncGetView(peer, i);
-        if(ncGetViewClass(view) == protocol.characterCl)
+        auto view = ncGetRemoteObject(peer, i);
+        if(ncGetObjectClass(view) == protocol.characterCl)
         {
-            int x = ncGetViewInt(view, protocol.characterPosX);
-            int y = ncGetViewInt(view, protocol.characterPosY);
+            int x = ncGetObjectInt(view, protocol.characterPosX);
+            int y = ncGetObjectInt(view, protocol.characterPosY);
             glBegin(GL_TRIANGLE_FAN);
             for(int j=0; j<12; ++j)
             {
@@ -172,6 +175,18 @@ void Client::Draw() const
                 glVertex2f(x + cosf(a)*10, y + sinf(a)*10);
             }
             glEnd();
+
+            auto view2 = ncGetObjectRef(view, protocol.characterTargetChar);
+            if(view2 && ncGetObjectClass(view2) == protocol.characterCl)
+            {
+                int x2 = ncGetObjectInt(view2, protocol.characterPosX);
+                int y2 = ncGetObjectInt(view2, protocol.characterPosY);
+                glColor3f(1,1,1);
+                glBegin(GL_LINES);
+                glVertex2i(x,y);
+                glVertex2i(x2,y2);
+                glEnd();
+            }
         }
     }
     glPopMatrix();     
@@ -194,6 +209,20 @@ void Client::Update(float timestep)
         glfwGetCursorPos(win, &x, &y);
         ncSetObjectInt(input, protocol.inputTargetX, static_cast<int>(x));
         ncSetObjectInt(input, protocol.inputTargetY, static_cast<int>(y));
+        ncSetObjectRef(input, protocol.inputTargetChar, nullptr);
+        for(int i=0, n=ncGetRemoteObjectCount(peer); i<n; ++i)
+        {
+            auto view = ncGetRemoteObject(peer, i);
+            if(ncGetObjectClass(view) == protocol.characterCl)
+            {
+                int dx = ncGetObjectInt(view, protocol.characterPosX) - x;
+                int dy = ncGetObjectInt(view, protocol.characterPosY) - y;
+                if(dx*dx + dy*dy < 32*32)
+                {
+                    ncSetObjectRef(input, protocol.inputTargetChar, view);
+                }
+            }
+        }
     }
     ncPublishFrame(auth);
 
@@ -217,6 +246,15 @@ Server::Server(const Protocol & protocol) : protocol(protocol)
     if(bind(sock, (SOCKADDR *)&addr, sizeof(addr)) == SOCKET_ERROR) throw std::runtime_error("bind(...) failed.");
 
     auth = ncCreateAuthority(protocol.protocol);
+
+    for(int i=0; i<10; ++i)
+    {
+        Character ch;
+        ch.object = ncCreateLocalObject(auth, protocol.characterCl);
+        ch.posX = ch.targetX = rand() % 640;
+        ch.posY = ch.targetY = rand() % 480;
+        chars.push_back(ch);
+    }
 }
 
 void Server::Update(float timestep)
@@ -230,7 +268,7 @@ void Server::Update(float timestep)
 
             chars.push_back({});
             auto & newChar = chars.back();
-            newChar.object = ncCreateObject(auth, protocol.characterCl);
+            newChar.object = ncCreateLocalObject(auth, protocol.characterCl);
             newChar.posX = newChar.targetX = 320;
             newChar.posY = newChar.targetY = 240;
             newPeer.player = &newChar;
@@ -243,13 +281,14 @@ void Server::Update(float timestep)
     for(auto & p : peers)
     {
         auto & peer = p.second;
-        for(int i=0, n=ncGetViewCount(peer.peer); i<n; ++i)
+        for(int i=0, n=ncGetRemoteObjectCount(peer.peer); i<n; ++i)
         {
-            auto view = ncGetView(peer.peer, i);
-            if(ncGetViewClass(view) == protocol.inputCl)
+            auto view = ncGetRemoteObject(peer.peer, i);
+            if(ncGetObjectClass(view) == protocol.inputCl)
             {
-                peer.player->targetX = static_cast<float>(ncGetViewInt(view, protocol.inputTargetX));
-                peer.player->targetY = static_cast<float>(ncGetViewInt(view, protocol.inputTargetY));
+                peer.player->targetX = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetX));
+                peer.player->targetY = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetY));
+                ncSetObjectRef(peer.player->object, protocol.characterTargetChar, ncGetObjectRef(view, protocol.inputTargetChar));
             }
         }
     }

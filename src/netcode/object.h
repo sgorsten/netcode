@@ -14,23 +14,42 @@
 #include <map>
 #include <set>
 
-namespace netcode { struct Client; }
+namespace netcode 
+{ 
+    struct Client; 
+    struct LocalObject;
+    struct RemoteObject;
+}
+
+struct NCobject
+{
+    virtual const NCclass * GetClass() const = 0;
+    virtual int GetInt(const NCint * field) const = 0;
+    virtual const NCobject * GetRef(const NCref * field) const = 0;
+    virtual void SetVisibility(NCpeer * peer, bool isVisible) const {}
+
+    virtual void SetInt(const NCint * f, int value) {}
+    virtual void SetRef(const NCref * f, const NCobject * value) {}
+    virtual void Destroy() {}
+};
 
 struct NCauthority
 {
 	const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
-	std::vector<NCobject *> objects;
-    std::vector<NCobject *> events;
+	std::vector<netcode::LocalObject *> objects;
+    std::vector<netcode::LocalObject *> events;
     std::vector<NCpeer *> peers;
 
 	std::vector<uint8_t> state;
-    std::map<int, std::vector<NCobject *>> eventHistory;
+    std::map<int, std::vector<netcode::LocalObject *>> eventHistory;
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
 	NCauthority(const NCprotocol * protocol);
     ~NCauthority();
+
+    void PurgeReferencesToObject(NCobject * object);
 
     const uint8_t * GetFrameState(int frame) const
     {
@@ -39,11 +58,11 @@ struct NCauthority
     }
 
     NCpeer * CreatePeer();
-	NCobject * CreateObject(const NCclass * objectClass);
+	netcode::LocalObject * CreateObject(const NCclass * objectClass);
     void PublishFrame();
 };
 
-struct NCobject
+struct netcode::LocalObject : public NCobject
 {
     NCauthority * auth;
     const NCclass * cl;
@@ -51,17 +70,23 @@ struct NCobject
 	int varStateOffset;
     bool isPublished;
 
-	NCobject(NCauthority * auth, const NCclass * cl);
+	LocalObject(NCauthority * auth, const NCclass * cl);
 
-    void Destroy();
-    void SetIntField(const NCint * field, int value);
+    const NCclass * GetClass() const override { return cl; }
+    int GetInt(const NCint * field) const override;
+    const NCobject * GetRef(const NCref * field) const override;
+    void SetVisibility(NCpeer * peer, bool isVisible) const override;
+
+    void SetInt(const NCint * f, int value) override;
+    void SetRef(const NCref * f, const NCobject * value) override;
+    void Destroy() override;
 };
 
 struct netcode::Client
 {
     struct Frame
     {
-        std::vector<std::shared_ptr<NCview>> views;
+        std::vector<std::shared_ptr<netcode::RemoteObject>> views;
         Distribs distribs;
     };
 
@@ -69,12 +94,12 @@ struct netcode::Client
     netcode::RangeAllocator stateAlloc;
     std::map<int, Frame> frames;
     std::map<int, std::vector<uint8_t>> frameStates;
-    std::map<int, std::weak_ptr<NCview>> id2View;
-    std::vector<std::unique_ptr<NCview>> events;
+    std::map<int, std::weak_ptr<netcode::RemoteObject>> id2View;
+    std::vector<std::unique_ptr<netcode::RemoteObject>> events;
 
 	Client(const NCprotocol * protocol);
 
-    std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
+    std::shared_ptr<netcode::RemoteObject> CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
     const uint8_t * GetCurrentState() const { return frameStates.rbegin()->second.data(); }
     const uint8_t * GetFrameState(int frame) const
@@ -83,7 +108,7 @@ struct netcode::Client
         return it != end(frameStates) ? it->second.data() : nullptr;
     }
 
-	void ConsumeUpdate(netcode::ArithmeticDecoder & decoder);
+	void ConsumeUpdate(netcode::ArithmeticDecoder & decoder, NCpeer * peer);
     void ProduceResponse(netcode::ArithmeticEncoder & encoder) const;
 };
 
@@ -91,14 +116,14 @@ struct NCpeer
 {
     struct ObjectRecord
     {
-        const NCobject * object; int uniqueId, frameAdded, frameRemoved; 
+        const netcode::LocalObject * object; int uniqueId, frameAdded, frameRemoved; 
         bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
     NCauthority * auth;                                                 // Object authority whose objects may be visible to this peer
     std::vector<ObjectRecord> records;                                  // Records of object visibility
-    std::set<const NCobject *> visibleEvents;                           // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
-    std::vector<std::pair<const NCobject *,bool>> visChanges;           // Changes to visibility of objects (not events) since the last call to ncPublishFrame(...)
+    std::set<const netcode::LocalObject *> visibleEvents;                           // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
+    std::vector<std::pair<const netcode::LocalObject *,bool>> visChanges;           // Changes to visibility of objects (not events) since the last call to ncPublishFrame(...)
     std::map<int, netcode::Distribs> frameDistribs;                     // Probability distributions as they existed at the end of various frames
     std::vector<int> ackFrames;                                         // The set of frames that has been acknowledged by the remote peer
     int nextId;                                                         // The next network ID to use when sending to the remote peer
@@ -108,9 +133,11 @@ struct NCpeer
     NCpeer(NCauthority * auth);
     ~NCpeer();
 
+    int GetNetId(const NCobject * object, int frame) const;
+
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
-    void SetVisibility(const NCobject * object, bool setVisible);
+    void SetVisibility(const netcode::LocalObject * object, bool setVisible);
 
     void ProduceUpdate(netcode::ArithmeticEncoder & encoder);
     void ConsumeResponse(netcode::ArithmeticDecoder & decoder);
@@ -119,22 +146,26 @@ struct NCpeer
     void ConsumeMessage(const void * data, int size);
 
     int GetViewCount() const;
-    const NCview * GetView(int index) const;
+    const netcode::RemoteObject * GetView(int index) const;
 };
 
-struct NCview
+struct netcode::RemoteObject : public NCobject
 {
-    netcode::Client * client;
+    NCpeer * peer;
+    int uniqueId;
     const NCclass * cl;
     int frameAdded;
     std::vector<uint8_t> constState;
 	int varStateOffset;
     
-	NCview(netcode::Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState);
-    ~NCview();
+	RemoteObject(NCpeer * peer, int uniqueId, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState);
+    ~RemoteObject();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
-    int GetIntField(const NCint * field) const;
+
+    const NCclass * GetClass() const override { return cl; }
+    int GetInt(const NCint * field) const override;
+    const NCobject * GetRef(const NCref * field) const override;
 };
 
 #endif
