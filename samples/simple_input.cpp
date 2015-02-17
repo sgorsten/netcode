@@ -30,6 +30,7 @@ struct Protocol
     NCclass * characterCl, * inputCl;
     NCint * characterPosX, * characterPosY;
     NCint * inputTargetX, * inputTargetY;
+    NCref * characterTargetChar, * inputTargetChar;
 
     Protocol()
     {
@@ -38,10 +39,12 @@ struct Protocol
         characterCl = ncCreateClass(protocol, 0);
         characterPosX = ncCreateInt(characterCl, 0);
         characterPosY = ncCreateInt(characterCl, 0);
+        characterTargetChar = ncCreateRef(characterCl);
 
         inputCl = ncCreateClass(protocol, 0);
         inputTargetX = ncCreateInt(inputCl, 0);
-        inputTargetY = ncCreateInt(inputCl, 0);    
+        inputTargetY = ncCreateInt(inputCl, 0);
+        inputTargetChar = ncCreateRef(inputCl);
     }
 };
 
@@ -172,6 +175,18 @@ void Client::Draw() const
                 glVertex2f(x + cosf(a)*10, y + sinf(a)*10);
             }
             glEnd();
+
+            auto view2 = ncGetObjectRef(view, protocol.characterTargetChar);
+            if(view2 && ncGetObjectClass(view2) == protocol.characterCl)
+            {
+                int x2 = ncGetObjectInt(view2, protocol.characterPosX);
+                int y2 = ncGetObjectInt(view2, protocol.characterPosY);
+                glColor3f(1,1,1);
+                glBegin(GL_LINES);
+                glVertex2i(x,y);
+                glVertex2i(x2,y2);
+                glEnd();
+            }
         }
     }
     glPopMatrix();     
@@ -194,6 +209,20 @@ void Client::Update(float timestep)
         glfwGetCursorPos(win, &x, &y);
         ncSetObjectInt(input, protocol.inputTargetX, static_cast<int>(x));
         ncSetObjectInt(input, protocol.inputTargetY, static_cast<int>(y));
+        ncSetObjectRef(input, protocol.inputTargetChar, nullptr);
+        for(int i=0, n=ncGetRemoteObjectCount(peer); i<n; ++i)
+        {
+            auto view = ncGetRemoteObject(peer, i);
+            if(ncGetObjectClass(view) == protocol.characterCl)
+            {
+                int dx = ncGetObjectInt(view, protocol.characterPosX) - x;
+                int dy = ncGetObjectInt(view, protocol.characterPosY) - y;
+                if(dx*dx + dy*dy < 32*32)
+                {
+                    ncSetObjectRef(input, protocol.inputTargetChar, view);
+                }
+            }
+        }
     }
     ncPublishFrame(auth);
 
@@ -217,6 +246,15 @@ Server::Server(const Protocol & protocol) : protocol(protocol)
     if(bind(sock, (SOCKADDR *)&addr, sizeof(addr)) == SOCKET_ERROR) throw std::runtime_error("bind(...) failed.");
 
     auth = ncCreateAuthority(protocol.protocol);
+
+    for(int i=0; i<10; ++i)
+    {
+        Character ch;
+        ch.object = ncCreateLocalObject(auth, protocol.characterCl);
+        ch.posX = ch.targetX = rand() % 640;
+        ch.posY = ch.targetY = rand() % 480;
+        chars.push_back(ch);
+    }
 }
 
 void Server::Update(float timestep)
@@ -250,6 +288,7 @@ void Server::Update(float timestep)
             {
                 peer.player->targetX = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetX));
                 peer.player->targetY = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetY));
+                ncSetObjectRef(peer.player->object, protocol.characterTargetChar, ncGetObjectRef(view, protocol.inputTargetChar));
             }
         }
     }
