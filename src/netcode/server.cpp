@@ -167,22 +167,6 @@ struct Frameset
 
     int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
 
-    void EncodeAndTallyObjectConstants(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
-    {
-        for(auto field : cl.constFields)
-		{
-            distribs.intConstDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
-		}    
-    }
-
-    void DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
-    {
-        for(auto field : cl.constFields)
-		{
-            reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intConstDists[field->uniqueId].DecodeAndTally(decoder);
-        }
-    }
-
     void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
     {
         const int sampleCount = GetSampleCount(frameAdded);
@@ -262,8 +246,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         {
             auto classIndex = distribs.eventClassDist.DecodeAndTally(decoder);
             auto cl = protocol->eventClasses[classIndex];
-            std::vector<uint8_t> state(cl->constSizeInBytes);
-            frameset.DecodeAndTallyObjectConstants(decoder, distribs, *cl, state.data());
+            auto state = distribs.DecodeAndTallyObjectConstants(decoder, *cl);
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
                 events.push_back(std::unique_ptr<NCview>(new NCview(this, cl, i, std::move(state))));
@@ -286,10 +269,8 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 	{
         auto classIndex = distribs.objectClassDist.DecodeAndTally(decoder);
         auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
-        auto cl = protocol->objectClasses[classIndex];
-        std::vector<uint8_t> constState(cl->constSizeInBytes);
-        frameset.DecodeAndTallyObjectConstants(decoder, distribs, *cl, constState.data());
-        views.push_back(CreateView(classIndex, uniqueId, frameset.frame, move(constState)));
+        auto state = distribs.DecodeAndTallyObjectConstants(decoder, *protocol->objectClasses[classIndex]);
+        views.push_back(CreateView(classIndex, uniqueId, frameset.frame, move(state)));
 	}
 
     auto & state = frames[frameset.frame].state;
@@ -398,7 +379,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         for(auto e : sendEvents)
         {
             distribs.eventClassDist.EncodeAndTally(encoder, e->cl->uniqueId);
-            frameset.EncodeAndTallyObjectConstants(encoder, distribs, *e->cl, e->constState.data());
+            distribs.EncodeAndTallyObjectConstants(encoder, *e->cl, e->constState.data());
         }
     }
 
@@ -428,7 +409,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     {
         distribs.objectClassDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
-        frameset.EncodeAndTallyObjectConstants(encoder, distribs, *record->object->cl, record->object->constState.data());
+        distribs.EncodeAndTallyObjectConstants(encoder, *record->object->cl, record->object->constState.data());
     }
 
     auto state = auth->GetFrameState(frameset.frame);

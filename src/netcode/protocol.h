@@ -56,8 +56,11 @@ namespace netcode
         IntegerDistribution uniqueIdDist;
         SymbolDistribution objectClassDist, eventClassDist;
 
-        Distribs() {}
-        Distribs(const NCprotocol & protocol) : intFieldDists(protocol.numIntFields), intConstDists(protocol.numIntConstants), objectClassDist(protocol.objectClasses.size()), eventClassDist(protocol.eventClasses.size()) {}
+        Distribs();
+        Distribs(const NCprotocol & protocol);
+
+        void EncodeAndTallyObjectConstants(ArithmeticEncoder & encoder, const NCclass & cl, const std::vector<uint8_t> & state);
+        std::vector<uint8_t> DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, const NCclass & cl);
     };
 }
 
