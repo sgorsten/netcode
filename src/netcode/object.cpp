@@ -36,19 +36,19 @@ NCpeer * NCauthority::CreatePeer()
 	return peer;    
 }
 
-NCobject * NCauthority::CreateObject(const NCclass * cl)
+LocalObject * NCauthority::CreateObject(const NCclass * cl)
 {
     if(cl->protocol != protocol) return nullptr;
 
     if(cl->isEvent)
     {
-        auto event = new NCobject(this, cl);
+        auto event = new LocalObject(this, cl);
         events.push_back(event);
         return event;
     }
     else
     {
-	    auto object = new NCobject(this, cl);
+	    auto object = new LocalObject(this, cl);
         if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
 	    objects.push_back(object);
 	    return object;
@@ -95,9 +95,44 @@ void NCauthority::PublishFrame()
 // NCobject //
 //////////////
 
-NCobject::NCobject(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), constState(cl->constSizeInBytes), varStateOffset(auth->stateAlloc.Allocate(cl->varSizeInBytes)), isPublished(false) {}
+LocalObject::LocalObject(NCauthority * auth, const NCclass * cl) : 
+    auth(auth), cl(cl), constState(cl->constSizeInBytes), varStateOffset(auth->stateAlloc.Allocate(cl->varSizeInBytes)), isPublished(false) 
+{
 
-void NCobject::Destroy()
+}
+
+int LocalObject::GetInt(const NCint * field) const
+{
+    if(field->cl != cl) return 0;
+    if(!field->isConst) return reinterpret_cast<const int &>(auth->state[varStateOffset + field->dataOffset]);
+    return reinterpret_cast<const int &>(constState[field->dataOffset]);
+}
+
+const NCobject * LocalObject::GetRef(const NCref * field) const
+{
+    if(field->cl != cl) return nullptr;
+    return reinterpret_cast<const NCobject * const &>(auth->state[varStateOffset + field->dataOffset]);
+}
+
+void LocalObject::SetVisibility(NCpeer * peer, bool isVisible) const
+{
+    peer->SetVisibility(this, isVisible); 
+}
+
+void LocalObject::SetInt(const NCint * field, int value)
+{ 
+    if(field->cl != cl) return;
+    if(!field->isConst) reinterpret_cast<int &>(auth->state[varStateOffset + field->dataOffset]) = value; 
+    else if(!isPublished) reinterpret_cast<int &>(constState[field->dataOffset]) = value;
+}
+
+void LocalObject::SetRef(const NCref * field, const NCobject * value)
+{ 
+    if(field->cl != cl) return;
+    reinterpret_cast<const NCobject * &>(auth->state[varStateOffset + field->dataOffset]) = value; 
+}
+
+void LocalObject::Destroy()
 { 
     if(cl->isEvent)
     {
@@ -118,19 +153,6 @@ void NCobject::Destroy()
     }
 }
 
-void NCobject::SetIntField(const NCint * field, int value)
-{ 
-    if(field->cl != cl) return;
-    if(!field->isConst) reinterpret_cast<int &>(auth->state[varStateOffset + field->dataOffset]) = value; 
-    else if(!isPublished) reinterpret_cast<int &>(constState[field->dataOffset]) = value;
-}
-
-void NCobject::SetRefField(const NCref * field, const NCobject * value)
-{ 
-    if(field->cl != cl) return;
-    reinterpret_cast<const NCobject * &>(auth->state[varStateOffset + field->dataOffset]) = value; 
-}
-
 ////////////
 // Client //
 ////////////
@@ -140,7 +162,7 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
-std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
+std::shared_ptr<RemoteObject> Client::CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
 {
     auto it = id2View.find(uniqueId);
     if(it != end(id2View))
@@ -153,12 +175,12 @@ std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int 
     }
 
     auto cl = protocol->objectClasses[classIndex];
-    auto ptr = std::make_shared<NCview>(this, cl, frameAdded, move(constState));
+    auto ptr = std::make_shared<RemoteObject>(peer, uniqueId, cl, frameAdded, move(constState));
     id2View[uniqueId] = ptr;
     return ptr;
 }
 
-void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
+void Client::ConsumeUpdate(ArithmeticDecoder & decoder, NCpeer * peer)
 {
     const int mostRecentFrame = frames.empty() ? 0 : frames.rbegin()->first;
     
@@ -184,7 +206,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
             auto state = frame.distribs.DecodeAndTallyObjectConstants(decoder, *cl);
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
-                events.push_back(std::unique_ptr<NCview>(new NCview(this, cl, i, std::move(state))));
+                events.push_back(std::unique_ptr<RemoteObject>(new RemoteObject(peer, 0, cl, i, std::move(state))));
             }
         }
     }
@@ -196,7 +218,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         int index = DecodeUniform(decoder, frame.views.size());
         frame.views[index].reset();
     }
-    EraseIf(frame.views, [](const std::shared_ptr<NCview> & v) { return !v; });
+    EraseIf(frame.views, [](const std::shared_ptr<RemoteObject> & v) { return !v; });
 
 	// Decode classes of newly created objects, and instantiate corresponding views
 	int newObjects = frame.distribs.newObjectCountDist.DecodeAndTally(decoder);
@@ -205,7 +227,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         auto classIndex = frame.distribs.objectClassDist.DecodeAndTally(decoder);
         auto uniqueId = frame.distribs.uniqueIdDist.DecodeAndTally(decoder);
         auto state = frame.distribs.DecodeAndTallyObjectConstants(decoder, *protocol->objectClasses[classIndex]);
-        frame.views.push_back(CreateView(classIndex, uniqueId, frameset.GetCurrentFrame(), move(state)));
+        frame.views.push_back(CreateView(peer, classIndex, uniqueId, frameset.GetCurrentFrame(), move(state)));
 	}
 
     auto & state = frameStates[frameset.GetCurrentFrame()];
@@ -273,7 +295,7 @@ void NCpeer::OnPublishFrame(int frame)
     frameDistribs.erase(begin(frameDistribs), frameDistribs.lower_bound(std::min(auth->frame - auth->protocol->maxFrameDelta, oldestAck)));
 }
 
-void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
+void NCpeer::SetVisibility(const LocalObject * object, bool setVisible)
 {
     if(!auth) return;
 
@@ -291,6 +313,7 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 
 int NCpeer::GetNetId(const NCobject * object, int frame) const
 {
+    // First check to see if this is a local object, in which case, send a positive ID
     for(auto & record : records)
     {
         if(record.object == object && record.IsLive(frame))
@@ -298,6 +321,17 @@ int NCpeer::GetNetId(const NCobject * object, int frame) const
             return record.uniqueId;
         }
     }
+
+    // Next, check to see if this is a remote object, in which case, send a negative ID
+    if(!client.frames.empty()) for(auto & view : client.frames.rbegin()->second.views)
+    {
+        if(view.get() == object)
+        {
+            return -view->uniqueId;
+        }
+    }
+
+    // Otherwise, send a 0, to indicate nullptr
     return 0;
 }
 
@@ -316,7 +350,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     else distribs = Distribs(*auth->protocol);
 
     // Encode visible events that occurred in each frame between the last acknowledged frame and the current frame
-    std::vector<const NCobject *> sendEvents;
+    std::vector<const LocalObject *> sendEvents;
     for(int i=frameset.GetPreviousFrame()+1; i<=frameset.GetCurrentFrame(); ++i)
     {
         sendEvents.clear();
@@ -405,7 +439,7 @@ void NCpeer::ConsumeMessage(const void * data, int size)
     std::vector<uint8_t> buffer(bytes, bytes+size);
     ArithmeticDecoder decoder(buffer);
     ConsumeResponse(decoder);
-    client.ConsumeUpdate(decoder);
+    client.ConsumeUpdate(decoder, this);
 }
 
 int NCpeer::GetViewCount() const 
@@ -414,7 +448,7 @@ int NCpeer::GetViewCount() const
     return client.frames.rbegin()->second.views.size() + client.events.size();
 }
 
-const NCview * NCpeer::GetView(int index) const
+const RemoteObject * NCpeer::GetView(int index) const
 { 
     if(client.frames.empty()) return nullptr;
     auto & frame = client.frames.rbegin()->second;
@@ -426,38 +460,47 @@ const NCview * NCpeer::GetView(int index) const
 // NCview //
 ////////////
 
-NCview::NCview(Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState) : 
-    client(client), cl(cl), frameAdded(frameAdded), constState(move(constState)), varStateOffset(client->stateAlloc.Allocate(cl->varSizeInBytes))
+RemoteObject::RemoteObject(NCpeer * peer, int uniqueId, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState) : 
+    peer(peer), uniqueId(uniqueId), cl(cl), frameAdded(frameAdded), constState(move(constState)), varStateOffset(peer->client.stateAlloc.Allocate(cl->varSizeInBytes))
 {
     
 }
 
-NCview::~NCview()
+RemoteObject::~RemoteObject()
 {
-    client->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
+    peer->client.stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
 }
 
-int NCview::GetIntField(const NCint * field) const
+int RemoteObject::GetInt(const NCint * field) const
 { 
     if(field->cl != cl) return 0;
     if(field->isConst) return reinterpret_cast<const int &>(constState[field->dataOffset]); 
-    return reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]); 
+    return reinterpret_cast<const int &>(peer->client.GetCurrentState()[varStateOffset + field->dataOffset]); 
 }
 
-const NCview * NCview::GetRefField(const NCref * field) const
+const NCobject * RemoteObject::GetRef(const NCref * field) const
 { 
-    if(field->cl != cl || client->frames.empty()) return nullptr;
-    auto id = reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]);
-    auto it = client->id2View.find(id);
-    if(it == end(client->id2View))
+    if(field->cl != cl || peer->client.frames.empty()) return nullptr;
+    auto id = reinterpret_cast<const int &>(peer->client.GetCurrentState()[varStateOffset + field->dataOffset]);
+    
+    if(id > 0) // Positive IDs refer to other remote objects
     {
-        if(id != 0)
-        {
-            int x = 5;
-        }
-        return nullptr;
+        auto it = peer->client.id2View.find(id);
+        if(it == end(peer->client.id2View)) return nullptr;
+        auto view = it->second.lock();
+        for(const auto & v : peer->client.frames.rbegin()->second.views) if(v.get() == view.get()) return v.get();
     }
-    auto view = it->second.lock();
-    for(const auto & v : client->frames.rbegin()->second.views) if(v.get() == view.get()) return v.get();
+
+    if(id < 0) // Negative IDs refer to our own local objects
+    {
+        for(auto & record : peer->records)
+        {
+            if(record.uniqueId == -id)
+            {
+                return record.object;
+            }
+        }
+    }
+
     return nullptr;
 }

@@ -145,7 +145,7 @@ Client::Client(const Protocol & protocol, GLFWwindow * win) : protocol(protocol)
     addr.sin_port = htons(12345);
 
     auth = ncCreateAuthority(protocol.protocol);
-    input = ncCreateObject(auth, protocol.inputCl);
+    input = ncCreateLocalObject(auth, protocol.inputCl);
     ncSetObjectInt(input, protocol.inputTargetX, 320);
     ncSetObjectInt(input, protocol.inputTargetY, 240);
     
@@ -158,13 +158,13 @@ void Client::Draw() const
     // Render client-side views of server-side objects
     glPushMatrix();
     glOrtho(0, 640, 480, 0, -1, +1);
-    for(int i=0, n=ncGetViewCount(peer); i<n; ++i)
+    for(int i=0, n=ncGetRemoteObjectCount(peer); i<n; ++i)
     {
-        auto view = ncGetView(peer, i);
-        if(ncGetViewClass(view) == protocol.characterCl)
+        auto view = ncGetRemoteObject(peer, i);
+        if(ncGetObjectClass(view) == protocol.characterCl)
         {
-            int x = ncGetViewInt(view, protocol.characterPosX);
-            int y = ncGetViewInt(view, protocol.characterPosY);
+            int x = ncGetObjectInt(view, protocol.characterPosX);
+            int y = ncGetObjectInt(view, protocol.characterPosY);
             glBegin(GL_TRIANGLE_FAN);
             for(int j=0; j<12; ++j)
             {
@@ -230,7 +230,7 @@ void Server::Update(float timestep)
 
             chars.push_back({});
             auto & newChar = chars.back();
-            newChar.object = ncCreateObject(auth, protocol.characterCl);
+            newChar.object = ncCreateLocalObject(auth, protocol.characterCl);
             newChar.posX = newChar.targetX = 320;
             newChar.posY = newChar.targetY = 240;
             newPeer.player = &newChar;
@@ -243,13 +243,13 @@ void Server::Update(float timestep)
     for(auto & p : peers)
     {
         auto & peer = p.second;
-        for(int i=0, n=ncGetViewCount(peer.peer); i<n; ++i)
+        for(int i=0, n=ncGetRemoteObjectCount(peer.peer); i<n; ++i)
         {
-            auto view = ncGetView(peer.peer, i);
-            if(ncGetViewClass(view) == protocol.inputCl)
+            auto view = ncGetRemoteObject(peer.peer, i);
+            if(ncGetObjectClass(view) == protocol.inputCl)
             {
-                peer.player->targetX = static_cast<float>(ncGetViewInt(view, protocol.inputTargetX));
-                peer.player->targetY = static_cast<float>(ncGetViewInt(view, protocol.inputTargetY));
+                peer.player->targetX = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetX));
+                peer.player->targetY = static_cast<float>(ncGetObjectInt(view, protocol.inputTargetY));
             }
         }
     }

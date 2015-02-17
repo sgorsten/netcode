@@ -15,7 +15,8 @@
 /* Protocol data */
 NCprotocol * protocol;
 NCclass * unitClass, * deathEvent;
-NCint * teamField, * hpField, * xField, * yField, * targetField;
+NCint * teamField, * hpField, * xField, * yField;
+NCref * targetField;
 NCint * deathX, * deathY;
 
 /* Server state */
@@ -45,7 +46,7 @@ void spawn_unit(int i)
     units[i].hp = 100;
     units[i].x = (float)(rand() % 320 + units[i].team * 960);
     units[i].y = (float)(rand() % 720);
-    units[i].object = ncCreateObject(serverAuth, unitClass);
+    units[i].object = ncCreateLocalObject(serverAuth, unitClass);
 }
 
 int main(int argc, char * argv[])
@@ -118,7 +119,7 @@ int main(int argc, char * argv[])
                 --units[target].hp;
                 if(units[target].hp < 1) /* if target is dead, destroy and respawn */
                 {
-                    NCobject * e = ncCreateObject(serverAuth, deathEvent);
+                    NCobject * e = ncCreateLocalObject(serverAuth, deathEvent);
                     ncSetObjectInt(e, deathX, units[target].x);
                     ncSetObjectInt(e, deathY, units[target].y);
                     ncSetVisibility(serverPeer, e, 1);
@@ -159,18 +160,18 @@ int main(int argc, char * argv[])
 		glClear(GL_COLOR_BUFFER_BIT);
 		glPushMatrix();
 		glOrtho(0, 1280, 720, 0, -1, +1);
-        for(i=0, n=ncGetViewCount(clientPeer); i<n; ++i)
+        for(i=0, n=ncGetRemoteObjectCount(clientPeer); i<n; ++i)
         {
-            const NCview * view = ncGetView(clientPeer, i), * view2;
-            if(ncGetViewClass(view) == unitClass)
+            const NCobject * view = ncGetRemoteObject(clientPeer, i), * view2;
+            if(ncGetObjectClass(view) == unitClass)
             {
                 /* draw colored circle to represent unit */
-                x = ncGetViewInt(view, xField);
-                y = ncGetViewInt(view, yField);
+                x = ncGetObjectInt(view, xField);
+                y = ncGetObjectInt(view, yField);
                 
-                if(view2 = ncGetViewRef(view, targetField))
+                if(view2 = ncGetObjectRef(view, targetField))
                 {
-                    int x2 = ncGetViewInt(view2, xField), y2 = ncGetViewInt(view2, yField);
+                    int x2 = ncGetObjectInt(view2, xField), y2 = ncGetObjectInt(view2, yField);
                     glColor3f(1,1,1);
                     glBegin(GL_LINES);
                     glVertex2i(x,y);
@@ -179,7 +180,7 @@ int main(int argc, char * argv[])
                 }
 
                 glBegin(GL_TRIANGLE_FAN);
-                switch(ncGetViewInt(view, teamField))
+                switch(ncGetObjectInt(view, teamField))
                 {
                 case 0: glColor3f(0,1,1); break;
                 case 1: glColor3f(1,0,0); break;
@@ -192,7 +193,7 @@ int main(int argc, char * argv[])
                 glEnd();
                 
                 /* draw unit health bar */
-                h = ncGetViewInt(view, hpField);
+                h = ncGetObjectInt(view, hpField);
                 glBegin(GL_QUADS);
                 glColor3f(0,1,0);
                 glVertex2i(x-10, y-13);
@@ -206,10 +207,10 @@ int main(int argc, char * argv[])
                 glVertex2i(x-10+(h*20/100), y-11);
                 glEnd();
             }
-            else if(ncGetViewClass(view) == deathEvent)
+            else if(ncGetObjectClass(view) == deathEvent)
             {
-                x = ncGetViewInt(view, deathX);
-                y = ncGetViewInt(view, deathY);
+                x = ncGetObjectInt(view, deathX);
+                y = ncGetObjectInt(view, deathY);
                 glBegin(GL_TRIANGLE_FAN);
                 glColor3f(1,1,0);
                 for(j=0; j<12; ++j)
