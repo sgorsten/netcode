@@ -163,16 +163,11 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 
     // Prepare probability distributions
     auto & frame = frames[frameset.GetCurrentFrame()];
-    if(frameset.GetPreviousFrame() != 0)
-    {
-        frame.distribs = frames[frameset.GetPreviousFrame()].distribs;
-        frame.views = frames[frameset.GetPreviousFrame()].views;
-        // NOTE: Deliberately not copying events from previous frame
-    }
+    if(frameset.GetPreviousFrame() != 0) frame = frames[frameset.GetPreviousFrame()];
     else frame.distribs = Distribs(*protocol);
 
     // Decode events that occurred in each frame between the last acknowledged frame and the current frame
-    auto & events = frames[frameset.GetCurrentFrame()].events;
+    events.clear();
     for(int i=frameset.GetPreviousFrame()+1; i<=frameset.GetCurrentFrame(); ++i)
     {
         // All of the events decoded in here happen on frame i
@@ -379,8 +374,7 @@ void NCpeer::ConsumeMessage(const void * data, int size)
 int NCpeer::GetViewCount() const 
 { 
     if(client.frames.empty()) return 0;
-    auto & frame = client.frames.rbegin()->second;
-    return frame.views.size() + frame.events.size();
+    return client.frames.rbegin()->second.views.size() + client.events.size();
 }
 
 const NCview * NCpeer::GetView(int index) const
@@ -388,7 +382,7 @@ const NCview * NCpeer::GetView(int index) const
     if(client.frames.empty()) return nullptr;
     auto & frame = client.frames.rbegin()->second;
     if(index < frame.views.size()) return frame.views[index].get();
-    return frame.events[index - frame.views.size()].get();
+    return client.events[index - frame.views.size()].get();
 }
 
 ////////////

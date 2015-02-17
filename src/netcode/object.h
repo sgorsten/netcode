@@ -62,7 +62,6 @@ struct netcode::Client
     struct Frame
     {
         std::vector<std::shared_ptr<NCview>> views;
-        std::vector<std::unique_ptr<NCview>> events;
         Distribs distribs;
     };
 
@@ -71,6 +70,7 @@ struct netcode::Client
     std::map<int, Frame> frames;
     std::map<int, std::vector<uint8_t>> frameStates;
     std::map<int, std::weak_ptr<NCview>> id2View;
+    std::vector<std::unique_ptr<NCview>> events;
 
 	Client(const NCprotocol * protocol);
 
