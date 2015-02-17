@@ -30,6 +30,7 @@
     <ClCompile Include="..\..\src\netcode\implementation.cpp" />
     <ClCompile Include="..\..\src\netcode\protocol.cpp" />
     <ClCompile Include="..\..\src\netcode\object.cpp" />
+    <ClCompile Include="..\..\src\netcode\remote.cpp" />
     <ClCompile Include="..\..\src\netcode\utility.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

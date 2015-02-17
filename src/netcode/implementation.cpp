@@ -27,8 +27,8 @@ void             ncSetObjectInt         (NCobject * o, const NCint * f, int valu
 void             ncSetObjectRef         (NCobject * o, const NCref * f, const NCobject * value) { o->SetRef(f, value); }
 void             ncDestroyObject        (NCobject * object)                                     { object->Destroy(); }
 
-int              ncGetRemoteObjectCount (const NCpeer * peer)                                   { return peer->client.GetObjectCount(); }
-const NCobject * ncGetRemoteObject      (const NCpeer * peer, int index)                        { return peer->client.GetObjectFromIndex(index); }
+int              ncGetRemoteObjectCount (const NCpeer * peer)                                   { return peer->remote.GetObjectCount(); }
+const NCobject * ncGetRemoteObject      (const NCpeer * peer, int index)                        { return peer->remote.GetObjectFromIndex(index); }
 void             ncSetVisibility        (NCpeer * peer, const NCobject * object, int isVisible) { object->SetVisibility(peer, !!isVisible); }
 NCblob *         ncProduceMessage       (NCpeer * peer)                                         { return new NCblob{peer->ProduceMessage()}; }
 void             ncConsumeMessage       (NCpeer * peer, const void * data, int size)            { peer->ConsumeMessage(data, size); }
