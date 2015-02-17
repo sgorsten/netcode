@@ -7,13 +7,14 @@
 
 #include "protocol.h"
 
-NCint::NCint(NCclass * cl) : cl(cl), uniqueId(cl->protocol->numIntFields++), dataOffset(cl->sizeInBytes)
+NCint::NCint(NCclass * cl, int flags) : cl(cl), isConst(flags & NC_CONST_FIELD_FLAG), uniqueId(cl->protocol->numIntFields++), dataOffset(isConst ? cl->constSizeInBytes : cl->varSizeInBytes)
 { 
-    cl->sizeInBytes += sizeof(int32_t); 
+    if(isConst) cl->constSizeInBytes += sizeof(int32_t); 
+    else cl->varSizeInBytes += sizeof(int32_t); 
     cl->fields.push_back(this);
 }
 
-NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(isEvent ? protocol->eventClasses.size() : protocol->objectClasses.size()), sizeInBytes(0)
+NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(isEvent ? protocol->eventClasses.size() : protocol->objectClasses.size()), constSizeInBytes(0), varSizeInBytes(0)
 {
     if(isEvent) protocol->eventClasses.push_back(this);
     else protocol->objectClasses.push_back(this);

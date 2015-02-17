@@ -60,9 +60,10 @@ struct netcode::Object : public NCobject
 {
     NCauthority * auth;
     const NCclass * cl;
-	int stateOffset;
+    std::vector<uint8_t> constState;
+	int varStateOffset;
 
-	Object(NCauthority * auth, const NCclass * cl, int stateOffset);
+	Object(NCauthority * auth, const NCclass * cl);
 
     void Destroy() override;
     void SetIntField(const NCint * field, int value) override;
@@ -98,7 +99,7 @@ struct netcode::Client
 
 	Client(const NCprotocol * protocol);
 
-    std::shared_ptr<netcode::ObjectView> CreateView(size_t classIndex, int uniqueId, int frameAdded);
+    std::shared_ptr<netcode::ObjectView> CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
     const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
     const uint8_t * GetFrameState(int frame) const
@@ -158,9 +159,11 @@ struct netcode::ObjectView : public NCview
 {
     netcode::Client * client;
     const NCclass * cl;
-    int frameAdded, stateOffset;
-
-	ObjectView(netcode::Client * client, const NCclass * cl, int stateOffset, int frameAdded);
+    int frameAdded;
+    std::vector<uint8_t> constState;
+	int varStateOffset;
+    
+	ObjectView(netcode::Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState);
     ~ObjectView();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }

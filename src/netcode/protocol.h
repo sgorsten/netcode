@@ -15,19 +15,21 @@
 struct NCint
 {
     NCclass *                cl;             // Class that this field belongs to
+    bool                     isConst;        // Whether or not this is a constant field
     size_t                   uniqueId;       // Unique identifier for this integer field within the protocol
     size_t                   dataOffset;     // Offset into object data where this field's value is stored
     
-    NCint(NCclass * cl);
+    NCint(NCclass * cl, int flags);
 };
 
 struct NCclass
 {
-    NCprotocol *             protocol;       // Protocol that this class belongs to
-    bool                     isEvent;        // Whether or not this is an event class
-    size_t                   uniqueId;       // Unique identifier for this class within the protocol
-    size_t                   sizeInBytes;    // Size of this class in bytes
-    std::vector<NCint *>     fields;         // Fields of this class
+    NCprotocol *             protocol;          // Protocol that this class belongs to
+    bool                     isEvent;           // Whether or not this is an event class
+    size_t                   uniqueId;          // Unique identifier for this class within the protocol
+    size_t                   constSizeInBytes;  // Size of all constant fields, in bytes
+    size_t                   varSizeInBytes;    // Size of all variable fields, in bytes
+    std::vector<NCint *>     fields;            // Fields of this class
 
     NCclass(NCprotocol * protocol, bool isEvent);
 };

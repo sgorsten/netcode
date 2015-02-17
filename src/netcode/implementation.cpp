@@ -10,8 +10,8 @@
 struct NCblob { std::vector<uint8_t> memory; };
 
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta)                                       { return new NCprotocol(maxFrameDelta); }
-NCclass *       ncCreateClass     (NCprotocol * protocol, int isEvent)                      { return new NCclass(protocol,!!isEvent); }
-NCint *         ncCreateInt       (NCclass * cl)                                            { return new NCint(cl); }
+NCclass *       ncCreateClass     (NCprotocol * protocol, int flags)                        { return new NCclass(protocol, flags & NC_EVENT_CLASS_FLAG); }
+NCint *         ncCreateInt       (NCclass * cl, int flags)                                 { return new NCint(cl, flags); }
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol)                             { return new NCauthority(protocol); }
 

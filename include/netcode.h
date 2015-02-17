@@ -12,6 +12,9 @@
 extern "C" {
 #endif
 
+#define NC_EVENT_CLASS_FLAG 0x00000001
+#define NC_CONST_FIELD_FLAG 0x00000001
+
 typedef struct NCprotocol NCprotocol;
 typedef struct NCclass NCclass;
 typedef struct NCint NCint;
@@ -22,8 +25,8 @@ typedef struct NCview NCview;
 typedef struct NCblob NCblob;
      
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta);
-NCclass *       ncCreateClass     (NCprotocol * protocol, int isEvent);
-NCint *         ncCreateInt       (NCclass * cl);
+NCclass *       ncCreateClass     (NCprotocol * protocol, int flags);
+NCint *         ncCreateInt       (NCclass * cl, int flags);
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol);
 

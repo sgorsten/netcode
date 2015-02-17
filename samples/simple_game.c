@@ -55,14 +55,14 @@ int main(int argc, char * argv[])
 
     /* init protocol */
     protocol = ncCreateProtocol(30);
-    unitClass = ncCreateClass(protocol,0);
-    teamField = ncCreateInt(unitClass);
-    hpField = ncCreateInt(unitClass);
-    xField = ncCreateInt(unitClass);
-    yField = ncCreateInt(unitClass);
-    deathEvent = ncCreateClass(protocol,1);
-    deathX = ncCreateInt(deathEvent);
-    deathY = ncCreateInt(deathEvent);
+    unitClass = ncCreateClass(protocol, 0);
+    teamField = ncCreateInt(unitClass, 0);
+    hpField = ncCreateInt(unitClass, 0);
+    xField = ncCreateInt(unitClass, 0);
+    yField = ncCreateInt(unitClass, 0);
+    deathEvent = ncCreateClass(protocol, NC_EVENT_CLASS_FLAG);
+    deathX = ncCreateInt(deathEvent, 0);
+    deathY = ncCreateInt(deathEvent, 0);
 
     /* init server */
     serverAuth = ncCreateAuthority(protocol);

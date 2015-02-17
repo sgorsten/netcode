@@ -35,13 +35,13 @@ struct Protocol
     {
         protocol = ncCreateProtocol(30);
 
-        characterCl = ncCreateClass(protocol,0);
-        characterPosX = ncCreateInt(characterCl);
-        characterPosY = ncCreateInt(characterCl);
+        characterCl = ncCreateClass(protocol, 0);
+        characterPosX = ncCreateInt(characterCl, 0);
+        characterPosY = ncCreateInt(characterCl, 0);
 
-        inputCl = ncCreateClass(protocol,0);
-        inputTargetX = ncCreateInt(inputCl);
-        inputTargetY = ncCreateInt(inputCl);    
+        inputCl = ncCreateClass(protocol, 0);
+        inputTargetX = ncCreateInt(inputCl, 0);
+        inputTargetY = ncCreateInt(inputCl, 0);    
     }
 };
 

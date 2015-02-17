@@ -45,16 +45,16 @@ int main(int argc, char * argv[])
 
     /* initialize protocol */
     protocol = ncCreateProtocol(30);
-    teamClass = ncCreateClass(protocol,0);
-    teamId = ncCreateInt(teamClass);
-    unitClass = ncCreateClass(protocol,0);
-    unitTeamId = ncCreateInt(unitClass);
-    unitHp = ncCreateInt(unitClass);
-    unitX = ncCreateInt(unitClass);
-    unitY = ncCreateInt(unitClass);
-    deathEvent = ncCreateClass(protocol,1);
-    deathX = ncCreateInt(deathEvent);
-    deathY = ncCreateInt(deathEvent);
+    teamClass = ncCreateClass(protocol, 0);
+    teamId = ncCreateInt(teamClass, 0);
+    unitClass = ncCreateClass(protocol, 0);
+    unitTeamId = ncCreateInt(unitClass, NC_CONST_FIELD_FLAG);
+    unitHp = ncCreateInt(unitClass, 0);
+    unitX = ncCreateInt(unitClass, 0);
+    unitY = ncCreateInt(unitClass, 0);
+    deathEvent = ncCreateClass(protocol, NC_EVENT_CLASS_FLAG);
+    deathX = ncCreateInt(deathEvent, 0);
+    deathY = ncCreateInt(deathEvent, 0);
 
     printf("(h)ost, (j)oin, or (q)uit?\n");
     switch(getchar())

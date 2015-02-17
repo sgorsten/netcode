@@ -48,7 +48,7 @@ NCobject * NCauthority::CreateObject(const NCclass * cl)
     }
     else
     {
-	    auto object = new Object(this, cl, stateAlloc.Allocate(cl->sizeInBytes));
+	    auto object = new Object(this, cl);
         if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
 	    objects.push_back(object);
 	    return object;
@@ -94,14 +94,14 @@ void NCauthority::PublishFrame()
 // Object //
 ////////////
 
-Object::Object(NCauthority * auth, const NCclass * cl, int stateOffset) : auth(auth), cl(cl), stateOffset(stateOffset)
+Object::Object(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), constState(cl->constSizeInBytes), varStateOffset(auth->stateAlloc.Allocate(cl->varSizeInBytes))
 {
     
 }
 
 void Object::Destroy()
 { 
-    auth->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+    auth->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
     for(auto peer : auth->peers) peer->SetVisibility(this, false);
     Erase(auth->objects, this);
     delete this; 
@@ -110,14 +110,15 @@ void Object::Destroy()
 void Object::SetIntField(const NCint * field, int value)
 { 
     if(!auth || field->cl != cl) return;
-    reinterpret_cast<int &>(auth->state[stateOffset + field->dataOffset]) = value; 
+    if(field->isConst) reinterpret_cast<int &>(constState[field->dataOffset]) = value; // TODO: Enforce that this only changes prior to first publish
+    else reinterpret_cast<int &>(auth->state[varStateOffset + field->dataOffset]) = value; 
 }
 
 ///////////
 // Event //
 ///////////
 
-Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->sizeInBytes), isPublished(false) {}
+Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->varSizeInBytes), isPublished(false) {}
 
 void Event::Destroy()
 { 
@@ -194,11 +195,28 @@ struct Frameset
 
     int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
 
+    void EncodeAndTallyObjectConst(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
+    {
+        for(auto field : cl.fields)
+		{
+            if(field->isConst) distribs.intFieldDists[field->uniqueId].dists[0].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
+		}    
+    }
+
+    void DecodeAndTallyObjectConst(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
+    {
+        for(auto field : cl.fields)
+		{
+            if(field->isConst) reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intFieldDists[field->uniqueId].dists[0].DecodeAndTally(decoder);
+        }
+    }
+
     void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
     {
         const int sampleCount = GetSampleCount(frameAdded);
         for(auto field : cl.fields)
 		{
+            if(field->isConst) continue;
             int offset = stateOffset + field->dataOffset, prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		    distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
@@ -210,6 +228,7 @@ struct Frameset
         const int sampleCount = GetSampleCount(frameAdded);
         for(auto field : cl.fields)
 		{
+            if(field->isConst) continue;
             int offset = stateOffset + field->dataOffset, prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		    reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
@@ -222,7 +241,7 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
-std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded)
+std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
 {
     auto it = id2View.find(uniqueId);
     if(it != end(id2View))
@@ -235,7 +254,7 @@ std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, 
     }
 
     auto cl = protocol->objectClasses[classIndex];
-    auto ptr = std::make_shared<ObjectView>(this, cl, (int)stateAlloc.Allocate(cl->sizeInBytes), frameAdded);
+    auto ptr = std::make_shared<ObjectView>(this, cl, frameAdded, move(constState));
     id2View[uniqueId] = ptr;
     return ptr;
 }
@@ -273,7 +292,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         {
             auto classIndex = distribs.eventClassDist.DecodeAndTally(decoder);
             auto cl = protocol->eventClasses[classIndex];
-            std::vector<uint8_t> state(cl->sizeInBytes);
+            std::vector<uint8_t> state(cl->varSizeInBytes);
             frameset.DecodeAndTallyEvent(decoder, distribs, *cl, state.data());
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
@@ -297,14 +316,17 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
 	{
         auto classIndex = distribs.objectClassDist.DecodeAndTally(decoder);
         auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
-        views.push_back(CreateView(classIndex, uniqueId, frameset.frame));
+        auto cl = protocol->objectClasses[classIndex];
+        std::vector<uint8_t> constState(cl->constSizeInBytes);
+        frameset.DecodeAndTallyObjectConst(decoder, distribs, *cl, constState.data());
+        views.push_back(CreateView(classIndex, uniqueId, frameset.frame, move(constState)));
 	}
 
     auto & state = frames[frameset.frame].state;
     state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
-	for(auto view : views) frameset.DecodeAndTallyObject(decoder, distribs, *view->cl, view->stateOffset, view->frameAdded, state.data());
+	for(auto view : views) frameset.DecodeAndTallyObject(decoder, distribs, *view->cl, view->varStateOffset, view->frameAdded, state.data());
 
     // Server will never again refer to frames before this point
     frames.erase(begin(frames), frames.lower_bound(std::min(frameset.frame - protocol->maxFrameDelta, frameset.prevFrames[3])));
@@ -437,13 +459,14 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     {
         distribs.objectClassDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
+        frameset.EncodeAndTallyObjectConst(encoder, distribs, *record->object->cl, record->object->constState.data());
     }
 
     auto state = auth->GetFrameState(frameset.frame);
     for(int i=0; i<4; ++i) frameset.prevStates[i] = auth->GetFrameState(frameset.prevFrames[i]);
 
 	// Encode updates for each view
-    for(const auto & record : records) if(record.IsLive(frameset.frame)) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->stateOffset, record.frameAdded, state);
+    for(const auto & record : records) if(record.IsLive(frameset.frame)) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
 }
 
 void NCpeer::ConsumeResponse(ArithmeticDecoder & decoder) 
@@ -495,20 +518,22 @@ const NCview * NCpeer::GetView(int index) const
 // NCview //
 ////////////
 
-ObjectView::ObjectView(Client * client, const NCclass * cl, int stateOffset, int frameAdded) : client(client), cl(cl), stateOffset(stateOffset), frameAdded(frameAdded)
+ObjectView::ObjectView(Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState) : 
+    client(client), cl(cl), frameAdded(frameAdded), constState(move(constState)), varStateOffset(client->stateAlloc.Allocate(cl->varSizeInBytes))
 {
     
 }
 
 ObjectView::~ObjectView()
 {
-    client->stateAlloc.Free(stateOffset, cl->sizeInBytes);
+    client->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
 }
 
 int ObjectView::GetIntField(const NCint * field) const
 { 
     if(field->cl != cl) return 0;
-    return reinterpret_cast<const int &>(client->GetCurrentState()[stateOffset + field->dataOffset]); 
+    if(field->isConst) return reinterpret_cast<const int &>(constState[field->dataOffset]); 
+    return reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]); 
 }
 
 EventView::EventView(const NCclass * cl, int frameAdded, std::vector<uint8_t> state) : cl(cl), frameAdded(frameAdded), state(move(state))
