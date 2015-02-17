@@ -131,7 +131,7 @@ int ncxGetMemoryUsage(NCauthority * authority)
 
 void ncxPrintCodeEfficiency (NCpeer * peer)
 {
-    auto client = &peer->client;
+    /*auto client = &peer->client;
     auto it = client->frames.rbegin();
     if(it == client->frames.rend()) return;
     const auto & distribs = it->second.distribs;
@@ -146,15 +146,15 @@ void ncxPrintCodeEfficiency (NCpeer * peer)
     {
         printf("\noutgoing code efficiency:\n\n");
         PrintEfficiency(*peer->auth->protocol, peer->frameDistribs.rbegin()->second);
-    }
+    }*/
 }
 
 #include <iostream>
 
 void ncxPrintFrameset (NCpeer * peer, const char * label)
 {
-    std::cout << label << " - ";
+    /*std::cout << label << " - ";
     for(auto f : peer->ackFrames) std::cout << f << " ";
     if(!peer->client.frames.empty()) std::cout << "- " << peer->client.frames.rbegin()->first;
-    std::cout << std::endl;
+    std::cout << std::endl;*/
 }

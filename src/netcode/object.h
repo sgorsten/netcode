@@ -16,7 +16,7 @@
 
 namespace netcode 
 { 
-    struct Client; 
+    class Client; 
     struct LocalObject;
     struct RemoteObject;
 }
@@ -82,7 +82,7 @@ struct netcode::LocalObject : public NCobject
     void Destroy() override;
 };
 
-struct netcode::Client
+class netcode::Client
 {
     struct Frame
     {
@@ -91,25 +91,23 @@ struct netcode::Client
     };
 
     const NCprotocol * protocol;
-    netcode::RangeAllocator stateAlloc;
     std::map<int, Frame> frames;
     std::map<int, std::vector<uint8_t>> frameStates;
     std::map<int, std::weak_ptr<netcode::RemoteObject>> id2View;
     std::vector<std::unique_ptr<netcode::RemoteObject>> events;
+public:
+    netcode::RangeAllocator stateAlloc;
 
 	Client(const NCprotocol * protocol);
 
+    int GetObjectCount() const;
+    const RemoteObject * GetObjectFromIndex(int index) const;
     const RemoteObject * GetObjectFromUniqueId(int uniqueId) const;
     int GetUniqueIdFromObject(const NCobject * object) const;
 
     std::shared_ptr<netcode::RemoteObject> CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
     const uint8_t * GetCurrentState() const { return frameStates.rbegin()->second.data(); }
-    const uint8_t * GetFrameState(int frame) const
-    {
-        auto it = frameStates.find(frame);
-        return it != end(frameStates) ? it->second.data() : nullptr;
-    }
 
 	void ConsumeUpdate(netcode::ArithmeticDecoder & decoder, NCpeer * peer);
     void ProduceResponse(netcode::ArithmeticEncoder & encoder) const;
@@ -147,9 +145,6 @@ struct NCpeer
 
     std::vector<uint8_t> ProduceMessage();
     void ConsumeMessage(const void * data, int size);
-
-    int GetViewCount() const;
-    const netcode::RemoteObject * GetView(int index) const;
 };
 
 struct netcode::RemoteObject : public NCobject

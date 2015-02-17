@@ -176,6 +176,20 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
+int Client::GetObjectCount() const
+{
+    if(frames.empty()) return 0;
+    return frames.rbegin()->second.views.size() + events.size();        
+}
+
+const RemoteObject * Client::GetObjectFromIndex(int index) const
+{ 
+    if(frames.empty()) return nullptr;
+    auto & frame = frames.rbegin()->second;
+    if(index < frame.views.size()) return frame.views[index].get();
+    return events[index - frame.views.size()].get();
+}
+
 const RemoteObject * Client::GetObjectFromUniqueId(int uniqueId) const
 {
     auto it = id2View.find(uniqueId);
@@ -469,20 +483,6 @@ void NCpeer::ConsumeMessage(const void * data, int size)
     client.ConsumeUpdate(decoder, this);
 }
 
-int NCpeer::GetViewCount() const 
-{ 
-    if(client.frames.empty()) return 0;
-    return client.frames.rbegin()->second.views.size() + client.events.size();
-}
-
-const RemoteObject * NCpeer::GetView(int index) const
-{ 
-    if(client.frames.empty()) return nullptr;
-    auto & frame = client.frames.rbegin()->second;
-    if(index < frame.views.size()) return frame.views[index].get();
-    return client.events[index - frame.views.size()].get();
-}
-
 ////////////
 // NCview //
 ////////////
@@ -508,7 +508,7 @@ int RemoteObject::GetInt(const NCint * field) const
 
 const NCobject * RemoteObject::GetRef(const NCref * field) const
 { 
-    if(field->cl != cl || peer->client.frames.empty()) return nullptr;
+    if(field->cl != cl) return nullptr;
     auto id = reinterpret_cast<const int &>(peer->client.GetCurrentState()[varStateOffset + field->dataOffset]);
     
     if(id > 0) // Positive IDs refer to other remote objects
