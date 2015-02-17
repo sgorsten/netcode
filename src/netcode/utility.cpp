@@ -309,10 +309,12 @@ namespace netcode
         for(int bits=0; bits<32; ++bits)
         {
             float p = dist.GetProbability(bits);
-            cost += p * (-log(p) + std::max(bits-1,0));
+            float tp = dist.GetTrueProbability(bits);
+            cost += tp * (-log(p) + std::max(bits-1,0));
 
             p = dist.GetProbability(bits + 32);
-            cost += p * (-log(p) + std::max(bits-1,0));
+            tp = dist.GetTrueProbability(bits + 32);
+            cost += tp * (-log(p) + std::max(bits-1,0));
         }
         return cost;
     }

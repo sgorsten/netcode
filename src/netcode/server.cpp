@@ -181,26 +181,25 @@ struct Frameset
 
     void EncodeAndTallyObjectConstants(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
     {
-        for(auto field : cl.fields)
+        for(auto field : cl.constFields)
 		{
-            if(field->isConst) distribs.intFieldDists[field->uniqueId].dists[0].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
+            distribs.intConstDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
 		}    
     }
 
     void DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
     {
-        for(auto field : cl.fields)
+        for(auto field : cl.constFields)
 		{
-            if(field->isConst) reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intFieldDists[field->uniqueId].dists[0].DecodeAndTally(decoder);
+            reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intConstDists[field->uniqueId].DecodeAndTally(decoder);
         }
     }
 
     void EncodeAndTallyObject(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, const uint8_t * state)
     {
         const int sampleCount = GetSampleCount(frameAdded);
-        for(auto field : cl.fields)
+        for(auto field : cl.varFields)
 		{
-            if(field->isConst) continue;
             int offset = stateOffset + field->dataOffset, prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		    distribs.intFieldDists[field->uniqueId].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[offset]), prevValues, predictors, sampleCount);
@@ -210,9 +209,8 @@ struct Frameset
     void DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, int stateOffset, int frameAdded, uint8_t * state)
     {
         const int sampleCount = GetSampleCount(frameAdded);
-        for(auto field : cl.fields)
+        for(auto field : cl.varFields)
 		{
-            if(field->isConst) continue;
             int offset = stateOffset + field->dataOffset, prevValues[4];
             for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		    reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);

@@ -7,11 +7,22 @@
 
 #include "protocol.h"
 
-NCint::NCint(NCclass * cl, int flags) : cl(cl), isConst(flags & NC_CONST_FIELD_FLAG), uniqueId(cl->protocol->numIntFields++), dataOffset(isConst ? cl->constSizeInBytes : cl->varSizeInBytes)
+NCint::NCint(NCclass * cl, int flags) : cl(cl), isConst(flags & NC_CONST_FIELD_FLAG)
 { 
-    if(isConst) cl->constSizeInBytes += sizeof(int32_t); 
-    else cl->varSizeInBytes += sizeof(int32_t); 
-    cl->fields.push_back(this);
+    if(isConst)
+    {
+        uniqueId = cl->protocol->numIntConstants++;
+        dataOffset = cl->constSizeInBytes;
+        cl->constSizeInBytes += sizeof(int32_t); 
+        cl->constFields.push_back(this);
+    }
+    else
+    {
+        uniqueId = cl->protocol->numIntFields++;
+        dataOffset = cl->varSizeInBytes;
+        cl->varSizeInBytes += sizeof(int32_t); 
+        cl->varFields.push_back(this);
+    }
 }
 
 NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(isEvent ? protocol->eventClasses.size() : protocol->objectClasses.size()), constSizeInBytes(0), varSizeInBytes(0)
@@ -20,7 +31,7 @@ NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEv
     else protocol->objectClasses.push_back(this);
 }
 
-NCprotocol::NCprotocol(int maxFrameDelta) : maxFrameDelta(maxFrameDelta), numIntFields(0)
+NCprotocol::NCprotocol(int maxFrameDelta) : maxFrameDelta(maxFrameDelta), numIntFields(0), numIntConstants(0)
 {
     
 }

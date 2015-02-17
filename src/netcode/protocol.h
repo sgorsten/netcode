@@ -29,7 +29,8 @@ struct NCclass
     size_t                   uniqueId;          // Unique identifier for this class within the protocol
     size_t                   constSizeInBytes;  // Size of all constant fields, in bytes
     size_t                   varSizeInBytes;    // Size of all variable fields, in bytes
-    std::vector<NCint *>     fields;            // Fields of this class
+    std::vector<NCint *>     constFields;       // Constant fields of this class
+    std::vector<NCint *>     varFields;         // Variable fields of this class
 
     NCclass(NCprotocol * protocol, bool isEvent);
 };
@@ -38,6 +39,7 @@ struct NCprotocol
 {
     int                      maxFrameDelta;  // Maximum difference in frame numbers for frames used in delta compression
     size_t                   numIntFields;   // Number of FieldDistributions used in this protocol
+    size_t                   numIntConstants;// Number of constant integer fields used in this protocol
     std::vector<NCclass *>   objectClasses;  // Classes used for persistent objects
     std::vector<NCclass *>   eventClasses;   // Classes used for instantaneous events
 
@@ -49,12 +51,13 @@ namespace netcode
     struct Distribs
     {
         std::vector<FieldDistribution> intFieldDists;
+        std::vector<IntegerDistribution> intConstDists;
 	    IntegerDistribution eventCountDist, newObjectCountDist, delObjectCountDist;
         IntegerDistribution uniqueIdDist;
         SymbolDistribution objectClassDist, eventClassDist;
 
         Distribs() {}
-        Distribs(const NCprotocol & protocol) : intFieldDists(protocol.numIntFields), objectClassDist(protocol.objectClasses.size()), eventClassDist(protocol.eventClasses.size()) {}
+        Distribs(const NCprotocol & protocol) : intFieldDists(protocol.numIntFields), intConstDists(protocol.numIntConstants), objectClassDist(protocol.objectClasses.size()), eventClassDist(protocol.eventClasses.size()) {}
     };
 }
 

@@ -38,13 +38,43 @@ namespace netcode
     static size_t MemUsage(const FieldDistribution & d) { return MemUsage(d.dists); }
     static size_t MemUsage(const Distribs & d) { return MemUsage(d.intFieldDists); }
     static size_t MemUsage(const NCint * f) { return sizeof(NCint); }
-    static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->fields); }
+    static size_t MemUsage(const NCclass * cl) { return sizeof(NCclass) + MemUsage(cl->constFields) + MemUsage(cl->varFields); }
     static size_t MemUsage(const NCprotocol * p) { return sizeof(NCprotocol) + MemUsage(p->objectClasses) + MemUsage(p->eventClasses); }
     static size_t MemUsage(const NCobject * obj) { return sizeof(NCobject); }
     static size_t MemUsage(const Client::Frame & f) { return MemUsage(f.views) + MemUsage(f.state) + MemUsage(f.distribs); }
     static size_t MemUsage(const Client & client) { return MemUsage(client.frames); }
     static size_t MemUsage(const NCpeer * peer) { return sizeof(NCpeer) + MemUsage(peer->records) + MemUsage(peer->visChanges) + MemUsage(peer->frameDistribs) + MemUsage(peer->client); }
     static size_t MemUsage(const NCview * peer) { return sizeof(NCview); }    
+
+    static void PrintEfficiency(const NCclass & cl, const Distribs & distribs)
+    {
+        float createCost = 0, updateCost = 0;
+        for(size_t j=0; j<cl.constFields.size(); ++j)
+        {
+            auto & dist = distribs.intConstDists[cl.constFields[j]->uniqueId];
+            float cost = dist.GetExpectedCost();
+            printf("  constant %d: %f bits\n", j, cost);
+            createCost += cost;
+        }
+        for(size_t j=0; j<cl.varFields.size(); ++j)
+        {
+            auto & dist = distribs.intFieldDists[cl.varFields[j]->uniqueId];
+            int best = dist.GetBestDistribution(4);
+            float cost = dist.dists[best].GetExpectedCost();
+            printf("  variable %d: %f bits ", j, cost);
+            switch(best)
+            {
+            case 0: printf("(zero predictor)\n"); break;
+            case 1: printf("(constant predictor)\n"); break;
+            case 2: printf("(linear predictor)\n"); break;
+            case 3: printf("(quadratic predictor)\n"); break;
+            case 4: printf("(cubic predictor)\n"); break;
+            }
+            createCost += dist.dists[0].GetExpectedCost();
+            updateCost += cost;
+        }
+        printf("  total: %f bits to create, %f bits to update.\n\n", createCost, updateCost);
+    }
 
     static void PrintEfficiency(const NCprotocol & protocol, const Distribs & distribs)
     {
@@ -80,39 +110,14 @@ namespace netcode
         {
             if(distribs.objectClassDist.GetTrueProbability(i) == 0) continue;
             printf("object class %d: (%f%%)\n", i, distribs.objectClassDist.GetTrueProbability(i) * 100);
-            float totalCost = 0;
-            for(size_t j=0; j<protocol.objectClasses[i]->fields.size(); ++j)
-            {
-                auto & dist = distribs.intFieldDists[protocol.objectClasses[i]->fields[j]->uniqueId];
-                int best = dist.GetBestDistribution(4);
-                float cost = dist.dists[best].GetExpectedCost();
-                printf("  field %d: %f bits ", j, cost);
-                switch(best)
-                {
-                case 0: printf("(zero predictor)\n"); break;
-                case 1: printf("(constant predictor)\n"); break;
-                case 2: printf("(linear predictor)\n"); break;
-                case 3: printf("(quadratic predictor)\n"); break;
-                case 4: printf("(cubic predictor)\n"); break;
-                }
-                totalCost += cost;
-            }
-            printf("  total: %f bits per object\n\n", totalCost);
+            PrintEfficiency(*protocol.objectClasses[i], distribs);
         }
 
         for(size_t i=0; i<protocol.eventClasses.size(); ++i)
         {
             if(distribs.eventClassDist.GetTrueProbability(i) == 0) continue;
             printf("event class %d: (%f%%)\n", i, distribs.eventClassDist.GetTrueProbability(i) * 100);
-            float totalCost = 0;
-            for(size_t j=0; j<protocol.eventClasses[i]->fields.size(); ++j)
-            {
-                auto & dist = distribs.intFieldDists[protocol.eventClasses[i]->fields[j]->uniqueId].dists[0];
-                float cost = dist.GetExpectedCost();
-                printf("  field %d: %f bits\n", j, cost);
-                totalCost += cost;
-            }
-            printf("  total: %f bits per event\n\n", totalCost);
+            PrintEfficiency(*protocol.eventClasses[i], distribs);
         }
     }
 }
