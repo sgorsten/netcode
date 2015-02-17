@@ -118,7 +118,7 @@ void Object::SetIntField(const NCint * field, int value)
 // Event //
 ///////////
 
-Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->varSizeInBytes), isPublished(false) {}
+Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->constSizeInBytes), isPublished(false) {}
 
 void Event::Destroy()
 { 
@@ -177,25 +177,9 @@ struct Frameset
         RefreshPredictors();
     }
 
-    void EncodeAndTallyEvent(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
-    {
-        for(auto field : cl.fields)
-		{
-            distribs.intFieldDists[field->uniqueId].dists[0].EncodeAndTally(encoder, reinterpret_cast<const int &>(state[field->dataOffset]));
-        }
-    }
-
-    void DecodeAndTallyEvent(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
-    {
-        for(auto field : cl.fields)
-		{
-            reinterpret_cast<int &>(state[field->dataOffset]) = distribs.intFieldDists[field->uniqueId].dists[0].DecodeAndTally(decoder);
-        }
-    }
-
     int GetSampleCount(int frameAdded) const { for(int i=4; i>0; --i) if(frameAdded <= prevFrames[i-1]) return i; return 0; }
 
-    void EncodeAndTallyObjectConst(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
+    void EncodeAndTallyObjectConstants(ArithmeticEncoder & encoder, netcode::Distribs & distribs, const NCclass & cl, const uint8_t * state)
     {
         for(auto field : cl.fields)
 		{
@@ -203,7 +187,7 @@ struct Frameset
 		}    
     }
 
-    void DecodeAndTallyObjectConst(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
+    void DecodeAndTallyObjectConstants(ArithmeticDecoder & decoder, netcode::Distribs & distribs, const NCclass & cl, uint8_t * state)
     {
         for(auto field : cl.fields)
 		{
@@ -292,8 +276,8 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         {
             auto classIndex = distribs.eventClassDist.DecodeAndTally(decoder);
             auto cl = protocol->eventClasses[classIndex];
-            std::vector<uint8_t> state(cl->varSizeInBytes);
-            frameset.DecodeAndTallyEvent(decoder, distribs, *cl, state.data());
+            std::vector<uint8_t> state(cl->constSizeInBytes);
+            frameset.DecodeAndTallyObjectConstants(decoder, distribs, *cl, state.data());
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
                 events.push_back(std::unique_ptr<EventView>(new EventView(cl, i, std::move(state))));
@@ -318,7 +302,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
         auto uniqueId = distribs.uniqueIdDist.DecodeAndTally(decoder);
         auto cl = protocol->objectClasses[classIndex];
         std::vector<uint8_t> constState(cl->constSizeInBytes);
-        frameset.DecodeAndTallyObjectConst(decoder, distribs, *cl, constState.data());
+        frameset.DecodeAndTallyObjectConstants(decoder, distribs, *cl, constState.data());
         views.push_back(CreateView(classIndex, uniqueId, frameset.frame, move(constState)));
 	}
 
@@ -429,7 +413,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         for(auto e : sendEvents)
         {
             distribs.eventClassDist.EncodeAndTally(encoder, e->cl->uniqueId);
-            frameset.EncodeAndTallyEvent(encoder, distribs, *e->cl, e->state.data());
+            frameset.EncodeAndTallyObjectConstants(encoder, distribs, *e->cl, e->state.data());
         }
     }
 
@@ -459,7 +443,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     {
         distribs.objectClassDist.EncodeAndTally(encoder, record->object->cl->uniqueId);
         distribs.uniqueIdDist.EncodeAndTally(encoder, record->uniqueId);
-        frameset.EncodeAndTallyObjectConst(encoder, distribs, *record->object->cl, record->object->constState.data());
+        frameset.EncodeAndTallyObjectConstants(encoder, distribs, *record->object->cl, record->object->constState.data());
     }
 
     auto state = auth->GetFrameState(frameset.frame);

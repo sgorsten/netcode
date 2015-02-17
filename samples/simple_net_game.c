@@ -53,8 +53,8 @@ int main(int argc, char * argv[])
     unitX = ncCreateInt(unitClass, 0);
     unitY = ncCreateInt(unitClass, 0);
     deathEvent = ncCreateClass(protocol, NC_EVENT_CLASS_FLAG);
-    deathX = ncCreateInt(deathEvent, 0);
-    deathY = ncCreateInt(deathEvent, 0);
+    deathX = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
+    deathY = ncCreateInt(deathEvent, NC_CONST_FIELD_FLAG);
 
     printf("(h)ost, (j)oin, or (q)uit?\n");
     switch(getchar())
