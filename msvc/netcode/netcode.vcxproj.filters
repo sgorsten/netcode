@@ -11,10 +11,10 @@
     <ClInclude Include="..\..\src\netcode\protocol.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\netcode\server.h">
+    <ClInclude Include="..\..\src\netcode\utility.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\netcode\utility.h">
+    <ClInclude Include="..\..\src\netcode\object.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>
@@ -28,10 +28,10 @@
     <ClCompile Include="..\..\src\netcode\protocol.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\netcode\server.cpp">
+    <ClCompile Include="..\..\src\netcode\utility.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\netcode\utility.cpp">
+    <ClCompile Include="..\..\src\netcode\object.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

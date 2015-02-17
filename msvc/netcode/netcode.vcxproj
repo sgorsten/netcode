@@ -22,14 +22,14 @@
     <ClInclude Include="..\..\include\netcode.h" />
     <ClInclude Include="..\..\include\netcodex.h" />
     <ClInclude Include="..\..\src\netcode\protocol.h" />
-    <ClInclude Include="..\..\src\netcode\server.h" />
+    <ClInclude Include="..\..\src\netcode\object.h" />
     <ClInclude Include="..\..\src\netcode\utility.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\netcode\extensions.cpp" />
     <ClCompile Include="..\..\src\netcode\implementation.cpp" />
     <ClCompile Include="..\..\src\netcode\protocol.cpp" />
-    <ClCompile Include="..\..\src\netcode\server.cpp" />
+    <ClCompile Include="..\..\src\netcode\object.cpp" />
     <ClCompile Include="..\..\src\netcode\utility.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
