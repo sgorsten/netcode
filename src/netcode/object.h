@@ -49,6 +49,8 @@ struct NCauthority
 	NCauthority(const NCprotocol * protocol);
     ~NCauthority();
 
+    void PurgeReferencesToObject(NCobject * object);
+
     const uint8_t * GetFrameState(int frame) const
     {
         auto it = frameState.find(frame);

@@ -55,6 +55,18 @@ LocalObject * NCauthority::CreateObject(const NCclass * cl)
     }
 }
 
+void NCauthority::PurgeReferencesToObject(NCobject * object)
+{
+    for(auto obj : objects)
+    {
+        for(auto field : obj->cl->varRefs)
+        {
+            auto & ref = reinterpret_cast<NCobject * &>(state[obj->varStateOffset + field->dataOffset]);
+            if(ref == object) ref = nullptr;
+        }
+    }
+}
+
 void NCauthority::PublishFrame()
 {
     // Publish object state
@@ -138,6 +150,7 @@ void LocalObject::Destroy()
     {
         if(!isPublished)
         {
+            auth->PurgeReferencesToObject(this); // TODO: Prevent taking references to events in the first place
             for(auto peer : auth->peers) peer->SetVisibility(this, false);
             Erase(auth->events, this);
             auth->events.erase(std::find(begin(auth->events), end(auth->events), this));
@@ -146,6 +159,7 @@ void LocalObject::Destroy()
     }
     else
     {
+        auth->PurgeReferencesToObject(this);
         auth->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
         for(auto peer : auth->peers) peer->SetVisibility(this, false);
         Erase(auth->objects, this);
@@ -468,6 +482,7 @@ RemoteObject::RemoteObject(NCpeer * peer, int uniqueId, const NCclass * cl, int 
 
 RemoteObject::~RemoteObject()
 {
+    peer->auth->PurgeReferencesToObject(this);
     peer->client.stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
 }
 
