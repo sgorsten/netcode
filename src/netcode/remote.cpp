@@ -45,21 +45,9 @@ struct RemoteSet::Object : public NCobject
     { 
         if(field->cl != cl) return nullptr;
         auto id = reinterpret_cast<const int &>(peer->remote.frameStates.rbegin()->second[varStateOffset + field->dataOffset]);
-    
         if(id > 0) return peer->remote.GetObjectFromUniqueId(id); // Positive IDs refer to other remote objects
-
-        if(id < 0) // Negative IDs refer to our own local objects
-        {
-            for(auto & record : peer->records)
-            {
-                if(record.uniqueId == -id)
-                {
-                    return record.object;
-                }
-            }
-        }
-
-        return nullptr;
+        if(id < 0) return peer->local.GetObjectFromUniqueId(-id); // Negative IDs refer to our own local objects
+        return nullptr;                                           // Zero refers to nullptr
     }
 };
 

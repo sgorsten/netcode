@@ -18,6 +18,33 @@ namespace netcode
 { 
     struct LocalObject;
 
+    class LocalSet
+    {
+        struct Record;
+
+        const NCauthority * auth;                                           // Object authority whose objects may be visible to this peer
+        std::vector<Record> records;                                  // Records of object visibility
+        std::set<const LocalObject *> visibleEvents;                           // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
+        std::vector<std::pair<const LocalObject *,bool>> visChanges;           // Changes to visibility of objects (not events) since the last call to ncPublishFrame(...)
+        std::map<int, Distribs> frameDistribs;                     // Probability distributions as they existed at the end of various frames
+        std::vector<int> ackFrames;                                         // The set of frames that has been acknowledged by the remote peer
+        int nextId;                                                         // The next network ID to use when sending to the remote peer
+    public:
+        LocalSet(const NCauthority * auth);
+        ~LocalSet();
+
+        const NCobject * GetObjectFromUniqueId(int uniqueId) const;
+        int GetUniqueIdFromObject(const NCobject * object, int frame) const;
+
+        int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
+        void OnPublishFrame(int frame);
+        void SetVisibility(const LocalObject * object, bool setVisible);
+
+        void ProduceUpdate(ArithmeticEncoder & encoder, NCpeer * peer);
+        void ConsumeResponse(ArithmeticDecoder & decoder);    
+        void PurgeReferences();
+    };
+
     class RemoteSet
     {
         struct Object;
@@ -38,8 +65,8 @@ namespace netcode
         const NCobject * GetObjectFromUniqueId(int uniqueId) const;
         int GetUniqueIdFromObject(const NCobject * object) const;
 
-	    void ConsumeUpdate(netcode::ArithmeticDecoder & decoder, NCpeer * peer);
-        void ProduceResponse(netcode::ArithmeticEncoder & encoder) const;
+	    void ConsumeUpdate(ArithmeticDecoder & decoder, NCpeer * peer);
+        void ProduceResponse(ArithmeticEncoder & encoder) const;
     };
 }
 
@@ -106,33 +133,14 @@ struct netcode::LocalObject : public NCobject
 
 struct NCpeer
 {
-    struct ObjectRecord
-    {
-        const netcode::LocalObject * object; int uniqueId, frameAdded, frameRemoved; 
-        bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
-    };
-
-    NCauthority * auth;                                                 // Object authority whose objects may be visible to this peer
-    std::vector<ObjectRecord> records;                                  // Records of object visibility
-    std::set<const netcode::LocalObject *> visibleEvents;                           // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
-    std::vector<std::pair<const netcode::LocalObject *,bool>> visChanges;           // Changes to visibility of objects (not events) since the last call to ncPublishFrame(...)
-    std::map<int, netcode::Distribs> frameDistribs;                     // Probability distributions as they existed at the end of various frames
-    std::vector<int> ackFrames;                                         // The set of frames that has been acknowledged by the remote peer
-    int nextId;                                                         // The next network ID to use when sending to the remote peer
-
+    NCauthority * auth;
+    netcode::LocalSet local;
     netcode::RemoteSet remote;
 
     NCpeer(NCauthority * auth);
     ~NCpeer();
 
     int GetNetId(const NCobject * object, int frame) const;
-
-    int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
-    void OnPublishFrame(int frame);
-    void SetVisibility(const netcode::LocalObject * object, bool setVisible);
-
-    void ProduceUpdate(netcode::ArithmeticEncoder & encoder);
-    void ConsumeResponse(netcode::ArithmeticDecoder & decoder);
 
     std::vector<uint8_t> ProduceMessage();
     void ConsumeMessage(const void * data, int size);

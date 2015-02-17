@@ -37,5 +37,8 @@
     <ClCompile Include="..\..\src\netcode\remote.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\netcode\local.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

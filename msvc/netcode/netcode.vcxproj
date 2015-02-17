@@ -28,6 +28,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\netcode\extensions.cpp" />
     <ClCompile Include="..\..\src\netcode\implementation.cpp" />
+    <ClCompile Include="..\..\src\netcode\local.cpp" />
     <ClCompile Include="..\..\src\netcode\protocol.cpp" />
     <ClCompile Include="..\..\src\netcode\object.cpp" />
     <ClCompile Include="..\..\src\netcode\remote.cpp" />
