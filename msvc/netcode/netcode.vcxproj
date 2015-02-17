@@ -21,8 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\netcode.h" />
     <ClInclude Include="..\..\include\netcodex.h" />
-    <ClInclude Include="..\..\src\netcode\protocol.h" />
-    <ClInclude Include="..\..\src\netcode\object.h" />
+    <ClInclude Include="..\..\src\netcode\implementation.h" />
     <ClInclude Include="..\..\src\netcode\utility.h" />
   </ItemGroup>
   <ItemGroup>

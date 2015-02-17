@@ -8,13 +8,10 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\netcode.h" />
     <ClInclude Include="..\..\include\netcodex.h" />
-    <ClInclude Include="..\..\src\netcode\protocol.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\netcode\utility.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\netcode\object.h">
+    <ClInclude Include="..\..\src\netcode\implementation.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

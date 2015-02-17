@@ -6,7 +6,7 @@
 // this software for any purpose, including commercial applications.
 
 #include "netcodex.h"
-#include "object.h"
+#include "implementation.h"
 
 namespace netcode
 {

@@ -5,7 +5,7 @@
 // irrevocable, world-wide license to copy, modify, and redistribute
 // this software for any purpose, including commercial applications.
 
-#include "object.h"
+#include "implementation.h"
 #include <cassert>
 
 using namespace netcode;
