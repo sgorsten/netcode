@@ -112,24 +112,6 @@ int RemoteSet::GetUniqueIdFromObject(const NCobject * object) const
     return 0;
 }
 
-std::shared_ptr<RemoteSet::Object> RemoteSet::CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
-{
-    auto it = id2View.find(uniqueId);
-    if(it != end(id2View))
-    {
-        if(auto ptr = it->second.lock())
-        {
-            assert(ptr->cl->uniqueId == classIndex);
-            return ptr;
-        }        
-    }
-
-    auto cl = protocol->objectClasses[classIndex];
-    auto ptr = std::make_shared<Object>(peer, uniqueId, cl, frameAdded, move(constState));
-    id2View[uniqueId] = ptr;
-    return ptr;
-}
-
 void RemoteSet::ConsumeUpdate(ArithmeticDecoder & decoder, NCpeer * peer)
 {
     const int mostRecentFrame = frames.empty() ? 0 : frames.rbegin()->first;
@@ -177,7 +159,15 @@ void RemoteSet::ConsumeUpdate(ArithmeticDecoder & decoder, NCpeer * peer)
         auto classIndex = frame.distribs.objectClassDist.DecodeAndTally(decoder);
         auto uniqueId = frame.distribs.uniqueIdDist.DecodeAndTally(decoder);
         auto state = frame.distribs.DecodeAndTallyObjectConstants(decoder, *protocol->objectClasses[classIndex]);
-        frame.views.push_back(CreateView(peer, classIndex, uniqueId, frameset.GetCurrentFrame(), move(state)));
+
+        auto it = id2View.find(uniqueId);
+        auto ptr = it != end(id2View) ? it->second.lock() : nullptr;
+        if(!ptr)
+        {
+            ptr = std::make_shared<Object>(peer, uniqueId, protocol->objectClasses[classIndex], frameset.GetCurrentFrame(), move(state));
+            id2View[uniqueId] = ptr;
+        }
+        frame.views.push_back(ptr);
 	}
 
     auto & state = frameStates[frameset.GetCurrentFrame()];

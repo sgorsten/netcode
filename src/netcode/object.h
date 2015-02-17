@@ -29,8 +29,6 @@ namespace netcode
         std::map<int, std::vector<uint8_t>> frameStates;
         std::map<int, std::weak_ptr<Object>> id2View;
         std::vector<std::unique_ptr<Object>> events;
-
-        std::shared_ptr<Object> CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
     public:
 	    RemoteSet(const NCprotocol * protocol);
         ~RemoteSet();
