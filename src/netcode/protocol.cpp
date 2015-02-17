@@ -28,6 +28,12 @@ NCint::NCint(NCclass * cl, int flags) : cl(cl), isConst(flags & NC_CONST_FIELD_F
     }
 }
 
+NCref::NCref(NCclass * cl) : cl(cl), dataOffset(cl->varSizeInBytes)
+{
+    cl->varSizeInBytes += std::max(sizeof(void *), sizeof(int)); // We will store pointers to objects on the "server" and integer IDs on the "client"
+    cl->varRefs.push_back(this);
+}
+
 NCclass::NCclass(NCprotocol * protocol, bool isEvent) : protocol(protocol), isEvent(isEvent), uniqueId(isEvent ? protocol->eventClasses.size() : protocol->objectClasses.size()), constSizeInBytes(0), varSizeInBytes(0)
 {
     if(isEvent) protocol->eventClasses.push_back(this);
@@ -117,6 +123,13 @@ void Frameset::DecodeAndTallyObject(ArithmeticDecoder & decoder, netcode::Distri
         for(int i=0; i<4; ++i) prevValues[i] = sampleCount > i ? reinterpret_cast<const int &>(prevStates[i][offset]) : 0;
 		reinterpret_cast<int &>(state[offset]) = distribs.intFieldDists[field->uniqueId].DecodeAndTally(decoder, prevValues, predictors, sampleCount);
 	}    
+
+    for(auto field : cl.varRefs)
+    {
+        int offset = stateOffset + field->dataOffset;
+        int prevId = sampleCount ? reinterpret_cast<const int &>(prevStates[0][offset]) : 0;
+        reinterpret_cast<int &>(state[offset]) = prevId + distribs.uniqueIdDist.DecodeAndTally(decoder);
+    }
 }
 
 void netcode::EncodeFramelist(ArithmeticEncoder & encoder, const int * frames, size_t numFrames, size_t maxFrames, int maxFrameDelta)

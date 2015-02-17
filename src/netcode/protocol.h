@@ -22,6 +22,14 @@ struct NCint
     NCint(NCclass * cl, int flags);
 };
 
+struct NCref
+{
+    NCclass *                cl;             // Class that this field belongs to
+    size_t                   dataOffset;     // Offset into object data where this field's value is stored
+    
+    NCref(NCclass * cl);
+};
+
 struct NCclass
 {
     NCprotocol *             protocol;          // Protocol that this class belongs to
@@ -31,6 +39,7 @@ struct NCclass
     size_t                   varSizeInBytes;    // Size of all variable fields, in bytes
     std::vector<NCint *>     constFields;       // Constant fields of this class
     std::vector<NCint *>     varFields;         // Variable fields of this class
+    std::vector<NCref *>     varRefs;           // Variable fields holding a reference to another object
 
     NCclass(NCprotocol * protocol, bool isEvent);
 };

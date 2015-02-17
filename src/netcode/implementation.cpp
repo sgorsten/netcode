@@ -12,6 +12,7 @@ struct NCblob { std::vector<uint8_t> memory; };
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta)                                       { return new NCprotocol(maxFrameDelta); }
 NCclass *       ncCreateClass     (NCprotocol * protocol, int flags)                        { return new NCclass(protocol, flags & NC_EVENT_CLASS_FLAG); }
 NCint *         ncCreateInt       (NCclass * cl, int flags)                                 { return (cl->isEvent && !(flags & NC_CONST_FIELD_FLAG)) ? nullptr : new NCint(cl, flags); }
+NCref *         ncCreateRef       (NCclass * cl)                                            { return cl->isEvent ? nullptr : new NCref(cl); }
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol)                             { return new NCauthority(protocol); }
 
@@ -20,6 +21,10 @@ NCobject *      ncCreateObject    (NCauthority * authority, const NCclass * cl) 
 void            ncPublishFrame    (NCauthority * authority)                                 { return authority->PublishFrame(); }
 void            ncDestroyAuthority(NCauthority * authority)                                 { delete authority; }
 
+void            ncSetObjectInt    (NCobject * o, const NCint * f, int value)                { o->SetIntField(f, value); }
+void            ncSetObjectRef    (NCobject * o, const NCref * f, const NCobject * value)   { o->SetRefField(f, value); }
+void            ncDestroyObject   (NCobject * object)                                       { object->Destroy(); }
+
 int             ncGetViewCount    (const NCpeer * peer)                                     { return peer->GetViewCount(); }
 const NCview *  ncGetView         (const NCpeer * peer, int index)                          { return peer->GetView(index); }
 void            ncSetVisibility   (NCpeer * peer, const NCobject * object, int isVisible)   { peer->SetVisibility(object, !!isVisible); }
@@ -27,11 +32,9 @@ NCblob *        ncProduceMessage  (NCpeer * peer)                               
 void            ncConsumeMessage  (NCpeer * peer, const void * data, int size)              { peer->ConsumeMessage(data, size); }
 void            ncDestroyPeer     (NCpeer * peer)                                           { delete peer; }
 
-void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
-void            ncDestroyObject   (NCobject * object)                                       { object->Destroy(); }
-
 const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->cl; }
 int             ncGetViewInt      (const NCview * view, const NCint * field)                { return view->GetIntField(field); }
+const NCview *  ncGetViewRef      (const NCview * view, const NCref * field)                { return view->GetRefField(field); }
 
 const void *    ncGetBlobData     (const NCblob * blob)                                     { return blob->memory.data(); }
 int             ncGetBlobSize     (const NCblob * blob)                                     { return blob->memory.size(); }

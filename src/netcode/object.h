@@ -53,8 +53,9 @@ struct NCobject
 
 	NCobject(NCauthority * auth, const NCclass * cl);
 
-    void Destroy();
     void SetIntField(const NCint * field, int value);
+    void SetRefField(const NCref * field, const NCobject * value);
+    void Destroy();
 };
 
 struct netcode::Client
@@ -108,6 +109,8 @@ struct NCpeer
     NCpeer(NCauthority * auth);
     ~NCpeer();
 
+    int GetNetId(const NCobject * object, int frame) const;
+
     int GetOldestAckFrame() const { return ackFrames.empty() ? 0 : ackFrames.back(); }
     void OnPublishFrame(int frame);
     void SetVisibility(const NCobject * object, bool setVisible);
@@ -135,6 +138,7 @@ struct NCview
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
     int GetIntField(const NCint * field) const;
+    const NCview * GetRefField(const NCref * field) const;
 };
 
 #endif

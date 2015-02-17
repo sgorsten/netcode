@@ -18,6 +18,7 @@ extern "C" {
 typedef struct NCprotocol NCprotocol;
 typedef struct NCclass NCclass;
 typedef struct NCint NCint;
+typedef struct NCref NCref;
 typedef struct NCauthority NCauthority;
 typedef struct NCpeer NCpeer;
 typedef struct NCobject NCobject;
@@ -27,6 +28,7 @@ typedef struct NCblob NCblob;
 NCprotocol *    ncCreateProtocol  (int maxFrameDelta);
 NCclass *       ncCreateClass     (NCprotocol * protocol, int flags);
 NCint *         ncCreateInt       (NCclass * cl, int flags);
+NCref *         ncCreateRef       (NCclass * cl);
 
 NCauthority *   ncCreateAuthority (const NCprotocol * protocol);
 
@@ -35,6 +37,10 @@ NCobject *      ncCreateObject    (NCauthority * authority, const NCclass * cl);
 void            ncPublishFrame    (NCauthority * authority);
 void            ncDestroyAuthority(NCauthority * authority);
 
+void            ncSetObjectInt    (NCobject * object, const NCint * field, int value);
+void            ncSetObjectRef    (NCobject * object, const NCref * field, const NCobject * value);
+void            ncDestroyObject   (NCobject * object);
+
 int             ncGetViewCount    (const NCpeer * peer);
 const NCview *  ncGetView         (const NCpeer * peer, int index);
 void            ncSetVisibility   (NCpeer * peer, const NCobject * object, int isVisible);
@@ -42,11 +48,9 @@ NCblob *        ncProduceMessage  (NCpeer * peer);
 void            ncConsumeMessage  (NCpeer * peer, const void * data, int size);
 void            ncDestroyPeer     (NCpeer * peer);
 
-void            ncSetObjectInt    (NCobject * object, const NCint * field, int value);
-void            ncDestroyObject   (NCobject * object);
-
 const NCclass * ncGetViewClass    (const NCview * view);
 int             ncGetViewInt      (const NCview * view, const NCint * field);
+const NCview *  ncGetViewRef      (const NCview * view, const NCref * field);
 
 const void *    ncGetBlobData     (const NCblob * blob);
 int             ncGetBlobSize     (const NCblob * blob);

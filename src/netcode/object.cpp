@@ -125,6 +125,12 @@ void NCobject::SetIntField(const NCint * field, int value)
     else if(!isPublished) reinterpret_cast<int &>(constState[field->dataOffset]) = value;
 }
 
+void NCobject::SetRefField(const NCref * field, const NCobject * value)
+{ 
+    if(field->cl != cl) return;
+    reinterpret_cast<const NCobject * &>(auth->state[varStateOffset + field->dataOffset]) = value; 
+}
+
 ////////////
 // Client //
 ////////////
@@ -206,7 +212,10 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
     state.resize(std::max(stateAlloc.GetTotalCapacity(),size_t(1)));
 
 	// Decode updates for each view
-	for(auto view : frame.views) frameset.DecodeAndTallyObject(decoder, frame.distribs, *view->cl, view->varStateOffset, view->frameAdded, state.data());
+	for(auto view : frame.views)
+    {
+        frameset.DecodeAndTallyObject(decoder, frame.distribs, *view->cl, view->varStateOffset, view->frameAdded, state.data());
+    }
 
     // Server will never again refer to frames before this point
     int lastFrameToKeep = std::min(frameset.GetCurrentFrame() - protocol->maxFrameDelta, frameset.GetEarliestFrame());
@@ -280,6 +289,18 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
     }
 }
 
+int NCpeer::GetNetId(const NCobject * object, int frame) const
+{
+    for(auto & record : records)
+    {
+        if(record.object == object && record.IsLive(frame))
+        {
+            return record.uniqueId;
+        }
+    }
+    return 0;
+}
+
 void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 {
     std::vector<int> frameList = {auth->frame};
@@ -339,7 +360,23 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
 
 	// Encode updates for each view
     auto state = auth->GetFrameState(frameset.GetCurrentFrame());
-    for(const auto & record : records) if(record.IsLive(frameset.GetCurrentFrame())) frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
+    for(const auto & record : records)
+    {
+        if(record.IsLive(frameset.GetCurrentFrame()))
+        {
+            frameset.EncodeAndTallyObject(encoder, distribs, *record.object->cl, record.object->varStateOffset, record.frameAdded, state);
+
+            for(auto field : record.object->cl->varRefs)
+            {
+                auto offset = record.object->varStateOffset + field->dataOffset;
+                auto value = reinterpret_cast<const NCobject * const &>(state[offset]);
+                auto prevValue = record.IsLive(frameset.GetPreviousFrame()) ? reinterpret_cast<const NCobject * const &>(auth->GetFrameState(frameset.GetPreviousFrame())[offset]) : nullptr;
+                auto id = GetNetId(value, frameset.GetCurrentFrame());
+                auto prevId = GetNetId(prevValue, frameset.GetPreviousFrame());
+                distribs.uniqueIdDist.EncodeAndTally(encoder, id-prevId);
+            }
+        }
+    }
 }
 
 void NCpeer::ConsumeResponse(ArithmeticDecoder & decoder) 
@@ -405,4 +442,22 @@ int NCview::GetIntField(const NCint * field) const
     if(field->cl != cl) return 0;
     if(field->isConst) return reinterpret_cast<const int &>(constState[field->dataOffset]); 
     return reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]); 
+}
+
+const NCview * NCview::GetRefField(const NCref * field) const
+{ 
+    if(field->cl != cl || client->frames.empty()) return nullptr;
+    auto id = reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]);
+    auto it = client->id2View.find(id);
+    if(it == end(client->id2View))
+    {
+        if(id != 0)
+        {
+            int x = 5;
+        }
+        return nullptr;
+    }
+    auto view = it->second.lock();
+    for(const auto & v : client->frames.rbegin()->second.views) if(v.get() == view.get()) return v.get();
+    return nullptr;
 }
