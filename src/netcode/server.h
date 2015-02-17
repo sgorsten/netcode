@@ -14,12 +14,7 @@
 #include <map>
 #include <set>
 
-namespace netcode
-{
-    struct ObjectView;
-    struct EventView;
-    struct Client;
-}
+namespace netcode { struct Client; }
 
 struct NCauthority
 {
@@ -66,8 +61,8 @@ struct netcode::Client
 {
     struct Frame
     {
-        std::vector<std::shared_ptr<netcode::ObjectView>> views;
-        std::vector<std::unique_ptr<netcode::EventView>> events;
+        std::vector<std::shared_ptr<NCview>> views;
+        std::vector<std::unique_ptr<NCview>> events;
         std::vector<uint8_t> state;
         Distribs distribs;
     };
@@ -75,11 +70,11 @@ struct netcode::Client
     const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
     std::map<int, Frame> frames;
-    std::map<int, std::weak_ptr<netcode::ObjectView>> id2View;
+    std::map<int, std::weak_ptr<NCview>> id2View;
 
 	Client(const NCprotocol * protocol);
 
-    std::shared_ptr<netcode::ObjectView> CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
+    std::shared_ptr<NCview> CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
     const uint8_t * GetCurrentState() const { return frames.rbegin()->second.state.data(); }
     const uint8_t * GetFrameState(int frame) const
@@ -129,38 +124,17 @@ struct NCpeer
 
 struct NCview
 {
-    virtual ~NCview() {}
-
-    virtual const NCclass * GetClass() const = 0;
-    virtual int GetIntField(const NCint * field) const = 0;
-};
-
-struct netcode::ObjectView : public NCview
-{
     netcode::Client * client;
     const NCclass * cl;
     int frameAdded;
     std::vector<uint8_t> constState;
 	int varStateOffset;
     
-	ObjectView(netcode::Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState);
-    ~ObjectView();
+	NCview(netcode::Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState);
+    ~NCview();
 
     bool IsLive(int frame) const { return frameAdded <= frame; }
-    const NCclass * GetClass() const override { return cl; }
-    int GetIntField(const NCint * field) const override;
-};
-
-struct netcode::EventView : public NCview
-{
-    const NCclass * cl;
-    int frameAdded;
-    std::vector<uint8_t> state;
-
-	EventView(const NCclass * cl, int frameAdded, std::vector<uint8_t> state);
-
-    const NCclass * GetClass() const override { return cl; }
-    int GetIntField(const NCint * field) const override;
+    int GetIntField(const NCint * field) const;
 };
 
 #endif

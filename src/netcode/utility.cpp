@@ -455,6 +455,8 @@ namespace netcode
 
     size_t RangeAllocator::Allocate(size_t amount)
     {
+        if(amount == 0) return 0;
+
         for(auto it = freeList.rbegin(); it != freeList.rend(); ++it)
         {
             if(it->second == amount)
@@ -472,6 +474,6 @@ namespace netcode
 
     void RangeAllocator::Free(size_t offset, size_t amount)
     {
-        freeList.push_back({offset,amount});
+        if(amount != 0) freeList.push_back({offset,amount});
     }
 }

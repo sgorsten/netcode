@@ -211,7 +211,7 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
-std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
+std::shared_ptr<NCview> Client::CreateView(size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
 {
     auto it = id2View.find(uniqueId);
     if(it != end(id2View))
@@ -224,7 +224,7 @@ std::shared_ptr<ObjectView> Client::CreateView(size_t classIndex, int uniqueId, 
     }
 
     auto cl = protocol->objectClasses[classIndex];
-    auto ptr = std::make_shared<ObjectView>(this, cl, frameAdded, move(constState));
+    auto ptr = std::make_shared<NCview>(this, cl, frameAdded, move(constState));
     id2View[uniqueId] = ptr;
     return ptr;
 }
@@ -266,7 +266,7 @@ void Client::ConsumeUpdate(ArithmeticDecoder & decoder)
             frameset.DecodeAndTallyObjectConstants(decoder, distribs, *cl, state.data());
             if(i > mostRecentFrame) // Only generate an event once (it will likely be sent multiple times before being acknowledged)
             {
-                events.push_back(std::unique_ptr<EventView>(new EventView(cl, i, std::move(state))));
+                events.push_back(std::unique_ptr<NCview>(new NCview(this, cl, i, std::move(state))));
             }
         }
     }
@@ -487,31 +487,20 @@ const NCview * NCpeer::GetView(int index) const
 // NCview //
 ////////////
 
-ObjectView::ObjectView(Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState) : 
+NCview::NCview(Client * client, const NCclass * cl, int frameAdded, std::vector<uint8_t> constState) : 
     client(client), cl(cl), frameAdded(frameAdded), constState(move(constState)), varStateOffset(client->stateAlloc.Allocate(cl->varSizeInBytes))
 {
     
 }
 
-ObjectView::~ObjectView()
+NCview::~NCview()
 {
     client->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
 }
 
-int ObjectView::GetIntField(const NCint * field) const
+int NCview::GetIntField(const NCint * field) const
 { 
     if(field->cl != cl) return 0;
     if(field->isConst) return reinterpret_cast<const int &>(constState[field->dataOffset]); 
     return reinterpret_cast<const int &>(client->GetCurrentState()[varStateOffset + field->dataOffset]); 
-}
-
-EventView::EventView(const NCclass * cl, int frameAdded, std::vector<uint8_t> state) : cl(cl), frameAdded(frameAdded), state(move(state))
-{
-    
-}
-
-int EventView::GetIntField(const NCint * field) const
-{ 
-    if(field->cl != cl) return 0;
-    return reinterpret_cast<const int &>(state[field->dataOffset]); 
 }

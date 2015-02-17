@@ -30,7 +30,7 @@ void            ncDestroyPeer     (NCpeer * peer)                               
 void            ncSetObjectInt    (NCobject * object, const NCint * field, int value)       { object->SetIntField(field, value); }
 void            ncDestroyObject   (NCobject * object)                                       { object->Destroy(); }
 
-const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->GetClass(); }
+const NCclass * ncGetViewClass    (const NCview * view)                                     { return view->cl; }
 int             ncGetViewInt      (const NCview * view, const NCint * field)                { return view->GetIntField(field); }
 
 const void *    ncGetBlobData     (const NCblob * blob)                                     { return blob->memory.data(); }
