@@ -16,8 +16,6 @@
 
 namespace netcode
 {
-    struct Object;
-    struct Event;
     struct ObjectView;
     struct EventView;
     struct Client;
@@ -27,12 +25,12 @@ struct NCauthority
 {
 	const NCprotocol * protocol;
     netcode::RangeAllocator stateAlloc;
-	std::vector<netcode::Object *> objects;
-    std::vector<netcode::Event *> events;
+	std::vector<NCobject *> objects;
+    std::vector<NCobject *> events;
     std::vector<NCpeer *> peers;
 
 	std::vector<uint8_t> state;
-    std::map<int, std::vector<netcode::Event *>> eventHistory;
+    std::map<int, std::vector<NCobject *>> eventHistory;
     std::map<int, std::vector<uint8_t>> frameState;
     int frame;
 
@@ -52,34 +50,16 @@ struct NCauthority
 
 struct NCobject
 {
-    virtual void Destroy() = 0;
-    virtual void SetIntField(const NCint * field, int value) = 0;
-};
-
-struct netcode::Object : public NCobject
-{
     NCauthority * auth;
     const NCclass * cl;
     std::vector<uint8_t> constState;
 	int varStateOffset;
-
-	Object(NCauthority * auth, const NCclass * cl);
-
-    void Destroy() override;
-    void SetIntField(const NCint * field, int value) override;
-};
-
-struct netcode::Event : public NCobject
-{
-    NCauthority * auth;
-    const NCclass * cl;
-    std::vector<uint8_t> state;
     bool isPublished;
 
-    Event(NCauthority * auth, const NCclass * cl);
+	NCobject(NCauthority * auth, const NCclass * cl);
 
-    void Destroy() override;
-    void SetIntField(const NCint * field, int value) override;
+    void Destroy();
+    void SetIntField(const NCint * field, int value);
 };
 
 struct netcode::Client
@@ -116,14 +96,14 @@ struct NCpeer
 {
     struct ObjectRecord
     {
-        const netcode::Object * object; int uniqueId, frameAdded, frameRemoved; 
+        const NCobject * object; int uniqueId, frameAdded, frameRemoved; 
         bool IsLive(int frame) const { return frameAdded <= frame && frame < frameRemoved; }
     };
 
     NCauthority * auth;                                                 // Object authority whose objects may be visible to this peer
     std::vector<ObjectRecord> records;                                  // Records of object visibility
-    std::set<const netcode::Event *> visibleEvents;                     // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
-    std::vector<std::pair<const netcode::Object *,bool>> visChanges;    // Changes to visibility since the last call to ncPublishFrame(...)
+    std::set<const NCobject *> visibleEvents;                           // The set of events visible to this peer. Once ncPublishFrame(...) is called, the visibility of all events created that frame is frozen.
+    std::vector<std::pair<const NCobject *,bool>> visChanges;           // Changes to visibility of objects (not events) since the last call to ncPublishFrame(...)
     std::map<int, netcode::Distribs> frameDistribs;                     // Probability distributions as they existed at the end of various frames
     std::vector<int> ackFrames;                                         // The set of frames that has been acknowledged by the remote peer
     int nextId;                                                         // The next network ID to use when sending to the remote peer

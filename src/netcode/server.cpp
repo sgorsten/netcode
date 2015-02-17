@@ -42,13 +42,13 @@ NCobject * NCauthority::CreateObject(const NCclass * cl)
 
     if(cl->isEvent)
     {
-        auto event = new Event(this, cl);
+        auto event = new NCobject(this, cl);
         events.push_back(event);
         return event;
     }
     else
     {
-	    auto object = new Object(this, cl);
+	    auto object = new NCobject(this, cl);
         if(stateAlloc.GetTotalCapacity() > state.size()) state.resize(stateAlloc.GetTotalCapacity(), 0);
 	    objects.push_back(object);
 	    return object;
@@ -59,6 +59,7 @@ void NCauthority::PublishFrame()
 {
     // Publish object state
     ++frame;
+    for(auto obj : objects) obj->isPublished = true;
     frameState[frame] = state;
 
     // Publish events which occurred this frame
@@ -90,51 +91,38 @@ void NCauthority::PublishFrame()
     EraseBefore(eventHistory, lastFrameToKeep);
 }
 
-////////////
-// Object //
-////////////
+//////////////
+// NCobject //
+//////////////
 
-Object::Object(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), constState(cl->constSizeInBytes), varStateOffset(auth->stateAlloc.Allocate(cl->varSizeInBytes))
-{
-    
-}
+NCobject::NCobject(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), constState(cl->constSizeInBytes), varStateOffset(auth->stateAlloc.Allocate(cl->varSizeInBytes)), isPublished(false) {}
 
-void Object::Destroy()
+void NCobject::Destroy()
 { 
-    auth->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
-    for(auto peer : auth->peers) peer->SetVisibility(this, false);
-    Erase(auth->objects, this);
-    delete this; 
-}
-
-void Object::SetIntField(const NCint * field, int value)
-{ 
-    if(!auth || field->cl != cl) return;
-    if(field->isConst) reinterpret_cast<int &>(constState[field->dataOffset]) = value; // TODO: Enforce that this only changes prior to first publish
-    else reinterpret_cast<int &>(auth->state[varStateOffset + field->dataOffset]) = value; 
-}
-
-///////////
-// Event //
-///////////
-
-Event::Event(NCauthority * auth, const NCclass * cl) : auth(auth), cl(cl), state(cl->constSizeInBytes), isPublished(false) {}
-
-void Event::Destroy()
-{ 
-    if(!isPublished)
+    if(cl->isEvent)
     {
+        if(!isPublished)
+        {
+            for(auto peer : auth->peers) peer->SetVisibility(this, false);
+            Erase(auth->events, this);
+            auth->events.erase(std::find(begin(auth->events), end(auth->events), this));
+            delete this;
+        }
+    }
+    else
+    {
+        auth->stateAlloc.Free(varStateOffset, cl->varSizeInBytes);
         for(auto peer : auth->peers) peer->SetVisibility(this, false);
-        Erase(auth->events, this);
-        auth->events.erase(std::find(begin(auth->events), end(auth->events), this));
-        delete this;
+        Erase(auth->objects, this);
+        delete this; 
     }
 }
 
-void Event::SetIntField(const NCint * field, int value)
+void NCobject::SetIntField(const NCint * field, int value)
 { 
-    if(field->cl != cl || isPublished) return;
-    reinterpret_cast<int &>(state[field->dataOffset]) = value;
+    if(field->cl != cl) return;
+    if(!field->isConst) reinterpret_cast<int &>(auth->state[varStateOffset + field->dataOffset]) = value; 
+    else if(!isPublished) reinterpret_cast<int &>(constState[field->dataOffset]) = value;
 }
 
 ////////////
@@ -367,17 +355,16 @@ void NCpeer::SetVisibility(const NCobject * object, bool setVisible)
 {
     if(!auth) return;
 
-    if(auto obj = dynamic_cast<const Object *>(object))
+    if(object->cl->isEvent)
     {
-        visChanges.push_back({obj,setVisible});
+        if(object->isPublished) return;
+        if(setVisible) visibleEvents.insert(object);
+        else visibleEvents.erase(object);
     }
-    else if(auto ev = dynamic_cast<const Event *>(object))
+    else
     {
-        if(ev->isPublished) return;
-        if(setVisible) visibleEvents.insert(ev);
-        else visibleEvents.erase(ev);
+        visChanges.push_back({object,setVisible});
     }
-    else assert(false);
 }
 
 void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
@@ -402,7 +389,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
     else distribs = Distribs(*auth->protocol);
 
     // Encode visible events that occurred in each frame between the last acknowledged frame and the current frame
-    std::vector<const netcode::Event *> sendEvents;
+    std::vector<const NCobject *> sendEvents;
     for(int i=frameset.prevFrames[0]+1; i<=frameset.frame; ++i)
     {
         sendEvents.clear();
@@ -411,7 +398,7 @@ void NCpeer::ProduceUpdate(ArithmeticEncoder & encoder)
         for(auto e : sendEvents)
         {
             distribs.eventClassDist.EncodeAndTally(encoder, e->cl->uniqueId);
-            frameset.EncodeAndTallyObjectConstants(encoder, distribs, *e->cl, e->state.data());
+            frameset.EncodeAndTallyObjectConstants(encoder, distribs, *e->cl, e->constState.data());
         }
     }
 
