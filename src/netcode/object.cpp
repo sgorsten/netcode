@@ -176,6 +176,25 @@ Client::Client(const NCprotocol * protocol) : protocol(protocol)
 
 }
 
+const RemoteObject * Client::GetObjectFromUniqueId(int uniqueId) const
+{
+    auto it = id2View.find(uniqueId);
+    if(it == end(id2View)) return nullptr;
+    auto view = it->second.lock();
+    for(const auto & v : frames.rbegin()->second.views) if(v.get() == view.get()) return v.get();
+    return nullptr;
+}
+
+int Client::GetUniqueIdFromObject(const NCobject * object) const
+{
+    if(frames.empty()) return 0;
+    for(auto & view : frames.rbegin()->second.views)
+    {
+        if(view.get() == object) return view->uniqueId;
+    }
+    return 0;
+}
+
 std::shared_ptr<RemoteObject> Client::CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState)
 {
     auto it = id2View.find(uniqueId);
@@ -337,13 +356,7 @@ int NCpeer::GetNetId(const NCobject * object, int frame) const
     }
 
     // Next, check to see if this is a remote object, in which case, send a negative ID
-    if(!client.frames.empty()) for(auto & view : client.frames.rbegin()->second.views)
-    {
-        if(view.get() == object)
-        {
-            return -view->uniqueId;
-        }
-    }
+    if(auto id = client.GetUniqueIdFromObject(object)) return -id;
 
     // Otherwise, send a 0, to indicate nullptr
     return 0;
@@ -500,10 +513,7 @@ const NCobject * RemoteObject::GetRef(const NCref * field) const
     
     if(id > 0) // Positive IDs refer to other remote objects
     {
-        auto it = peer->client.id2View.find(id);
-        if(it == end(peer->client.id2View)) return nullptr;
-        auto view = it->second.lock();
-        for(const auto & v : peer->client.frames.rbegin()->second.views) if(v.get() == view.get()) return v.get();
+        return peer->client.GetObjectFromUniqueId(id);
     }
 
     if(id < 0) // Negative IDs refer to our own local objects

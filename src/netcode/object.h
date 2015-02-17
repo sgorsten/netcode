@@ -99,6 +99,9 @@ struct netcode::Client
 
 	Client(const NCprotocol * protocol);
 
+    const RemoteObject * GetObjectFromUniqueId(int uniqueId) const;
+    int GetUniqueIdFromObject(const NCobject * object) const;
+
     std::shared_ptr<netcode::RemoteObject> CreateView(NCpeer * peer, size_t classIndex, int uniqueId, int frameAdded, std::vector<uint8_t> constState);
 
     const uint8_t * GetCurrentState() const { return frameStates.rbegin()->second.data(); }
